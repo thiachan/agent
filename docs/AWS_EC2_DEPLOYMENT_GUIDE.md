@@ -155,8 +155,8 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
 2. **Clone Your Repository**
    ```bash
    # Option A: If using Git
-   git clone <your-repository-url> hrsp_ai_hub
-   cd hrsp_ai_hub
+   git clone <your-repository-url> AGENT
+   cd AGENT
    
    # Option B: If uploading files manually
    # Use SCP or SFTP to upload your project files
@@ -165,14 +165,14 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
 3. **If Uploading Manually (SCP)**
    ```bash
    # From your local machine (Windows PowerShell or Git Bash)
-   scp -i "your-key.pem" -r C:\Users\tyung\hrsp_ai_hub ubuntu@<PUBLIC_IP>:/home/ubuntu/apps/
+   scp -i "your-key.pem" -r C:\Users\tyung\AGENT ubuntu@<PUBLIC_IP>:/home/ubuntu/apps/
    ```
 
 ### Step 2.2: Backend Setup
 
 1. **Navigate to Backend**
    ```bash
-   cd /home/ubuntu/apps/hrsp_ai_hub/backend
+   cd /home/ubuntu/apps/AGENT/backend
    ```
 
 2. **Create Virtual Environment**
@@ -197,7 +197,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
    # Database
    DATABASE_URL=sqlite:///./app.db
    # For PostgreSQL (if using):
-   # DATABASE_URL=postgresql://username:password@localhost:5432/hrsp_ai_hub
+   # DATABASE_URL=postgresql://username:password@localhost:5432/AGENT
    
    # Security
    SECRET_KEY=your-super-secret-key-change-this-in-production-min-32-chars
@@ -222,10 +222,10 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
    CISCO_APPKEY=your-cisco-appkey
    
    # Vector Database
-   VECTOR_DB_PATH=/home/ubuntu/apps/hrsp_ai_hub/backend/data/vector_db
+   VECTOR_DB_PATH=/home/ubuntu/apps/AGENT/backend/data/vector_db
    
    # File Storage
-   UPLOAD_DIR=/home/ubuntu/apps/hrsp_ai_hub/backend/data/uploads
+   UPLOAD_DIR=/home/ubuntu/apps/AGENT/backend/data/uploads
    
    # CORS
    CORS_ORIGINS=http://localhost:3000,http://<YOUR_EC2_PUBLIC_IP>:3000,http://<YOUR_DOMAIN>
@@ -250,9 +250,9 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
    # If using PostgreSQL
    # First create database:
    # sudo -u postgres psql
-   # CREATE DATABASE hrsp_ai_hub;
+   # CREATE DATABASE AGENT;
    # CREATE USER hrsp_user WITH PASSWORD 'your_password';
-   # GRANT ALL PRIVILEGES ON DATABASE hrsp_ai_hub TO hrsp_user;
+   # GRANT ALL PRIVILEGES ON DATABASE AGENT TO hrsp_user;
    # \q
    ```
 
@@ -260,7 +260,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
 
 1. **Navigate to Frontend**
    ```bash
-   cd /home/ubuntu/apps/hrsp_ai_hub
+   cd /home/ubuntu/apps/AGENT
    ```
 
 2. **Install Node Dependencies**
@@ -293,7 +293,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
 
 1. **Start Backend**
    ```bash
-   cd /home/ubuntu/apps/hrsp_ai_hub/backend
+   cd /home/ubuntu/apps/AGENT/backend
    source venv/bin/activate
    uvicorn app.main:app --host 0.0.0.0 --port 8000
    ```
@@ -306,7 +306,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
 
 1. **In a New SSH Session, Start Frontend**
    ```bash
-   cd /home/ubuntu/apps/hrsp_ai_hub
+   cd /home/ubuntu/apps/AGENT
    npm run dev
    ```
 
@@ -330,9 +330,9 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
    [Service]
    Type=simple
    User=ubuntu
-   WorkingDirectory=/home/ubuntu/apps/hrsp_ai_hub/backend
-   Environment="PATH=/home/ubuntu/apps/hrsp_ai_hub/backend/venv/bin"
-   ExecStart=/home/ubuntu/apps/hrsp_ai_hub/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+   WorkingDirectory=/home/ubuntu/apps/AGENT/backend
+   Environment="PATH=/home/ubuntu/apps/AGENT/backend/venv/bin"
+   ExecStart=/home/ubuntu/apps/AGENT/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
    Restart=always
    RestartSec=10
    
@@ -354,7 +354,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
    [Service]
    Type=simple
    User=ubuntu
-   WorkingDirectory=/home/ubuntu/apps/hrsp_ai_hub
+   WorkingDirectory=/home/ubuntu/apps/AGENT
    Environment="PATH=/usr/bin:/usr/local/bin"
    ExecStart=/usr/bin/npm run start
    Restart=always
@@ -455,7 +455,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
 
 3. **Update Frontend .env.local**
    ```bash
-   cd /home/ubuntu/apps/hrsp_ai_hub
+   cd /home/ubuntu/apps/AGENT
    nano .env.local
    ```
    
@@ -493,7 +493,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
 
 1. **Update Backend CORS**
    ```bash
-   cd /home/ubuntu/apps/hrsp_ai_hub/backend
+   cd /home/ubuntu/apps/AGENT/backend
    nano .env
    ```
    
@@ -504,7 +504,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
 
 2. **Update Frontend .env.local**
    ```bash
-   cd /home/ubuntu/apps/hrsp_ai_hub
+   cd /home/ubuntu/apps/AGENT
    nano .env.local
    ```
    
@@ -592,10 +592,10 @@ sudo journalctl -u hrsp-frontend -n 50
    DATE=$(date +%Y%m%d_%H%M%S)
    
    # Backup database
-   cp /home/ubuntu/apps/hrsp_ai_hub/backend/app.db $BACKUP_DIR/app_$DATE.db
+   cp /home/ubuntu/apps/AGENT/backend/app.db $BACKUP_DIR/app_$DATE.db
    
    # Backup uploads
-   tar -czf $BACKUP_DIR/uploads_$DATE.tar.gz /home/ubuntu/apps/hrsp_ai_hub/backend/data/uploads
+   tar -czf $BACKUP_DIR/uploads_$DATE.tar.gz /home/ubuntu/apps/AGENT/backend/data/uploads
    
    # Keep only last 7 days
    find $BACKUP_DIR -name "*.db" -mtime +7 -delete
@@ -618,7 +618,7 @@ sudo nano /etc/logrotate.d/hrsp-ai-hub
 
 Add:
 ```
-/home/ubuntu/apps/hrsp_ai_hub/backend/logs/*.log {
+/home/ubuntu/apps/AGENT/backend/logs/*.log {
     daily
     rotate 7
     compress
@@ -643,7 +643,7 @@ Add:
    sudo netstat -tulpn | grep 8000
    
    # Test manually
-   cd /home/ubuntu/apps/hrsp_ai_hub/backend
+   cd /home/ubuntu/apps/AGENT/backend
    source venv/bin/activate
    uvicorn app.main:app --host 0.0.0.0 --port 8000
    ```
@@ -657,7 +657,7 @@ Add:
    sudo netstat -tulpn | grep 3000
    
    # Test manually
-   cd /home/ubuntu/apps/hrsp_ai_hub
+   cd /home/ubuntu/apps/AGENT
    npm run start
    ```
 
@@ -673,7 +673,7 @@ Add:
 4. **Permission Issues**
    ```bash
    # Fix ownership
-   sudo chown -R ubuntu:ubuntu /home/ubuntu/apps/hrsp_ai_hub
+   sudo chown -R ubuntu:ubuntu /home/ubuntu/apps/AGENT
    ```
 
 ---

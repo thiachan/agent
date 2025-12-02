@@ -14,8 +14,8 @@ Add these to your `backend/.env` file:
 # Email Configuration (SMTP)
 MAIL_USERNAME=your-email@gmail.com
 MAIL_PASSWORD=your-app-password
-MAIL_FROM=noreply@hrsp-ai-hub.com
-MAIL_FROM_NAME=HRSP AI Hub
+MAIL_FROM=noreply@agent.com
+MAIL_FROM_NAME=AGENT
 MAIL_SERVER=smtp.gmail.com
 MAIL_PORT=587
 MAIL_STARTTLS=true
@@ -37,7 +37,7 @@ FRONTEND_URL=http://localhost:3000
 2. **Generate App Password**:
    - Go to: https://myaccount.google.com/apppasswords
    - Select "Mail" and "Other (Custom name)"
-   - Enter "HRSP AI Hub"
+   - Enter "AGENT"
    - Copy the 16-character password
 3. **Use in .env**:
    ```env

@@ -66,7 +66,7 @@ Use Git to push changes from local, then pull on server.
 
 2. **On EC2 Server**
    ```bash
-   cd /home/ubuntu/apps/hrsp_ai_hub
+   cd /home/ubuntu/apps/AGENT
    git pull origin main
    
    # Restart services if needed
@@ -78,7 +78,7 @@ Use Git to push changes from local, then pull on server.
    Create `/home/ubuntu/deploy.sh`:
    ```bash
    #!/bin/bash
-   cd /home/ubuntu/apps/hrsp_ai_hub
+   cd /home/ubuntu/apps/AGENT
    git pull origin main
    
    # Backend
@@ -133,7 +133,7 @@ Use VS Code SFTP extension to sync files automatically.
        "port": 22,
        "username": "ubuntu",
        "privateKeyPath": "C:\\Users\\tyung\\path\\to\\your-key.pem",
-       "remotePath": "/home/ubuntu/apps/hrsp_ai_hub",
+       "remotePath": "/home/ubuntu/apps/AGENT",
        "uploadOnSave": true,
        "useTempFile": false,
        "openSsh": false,
@@ -177,8 +177,8 @@ Use rsync to sync files efficiently.
    # sync-to-ec2.ps1
    $EC2_IP = "YOUR_EC2_PUBLIC_IP"
    $KEY_PATH = "C:\Users\tyung\path\to\your-key.pem"
-   $LOCAL_PATH = "C:\Users\tyung\hrsp_ai_hub"
-   $REMOTE_PATH = "/home/ubuntu/apps/hrsp_ai_hub"
+   $LOCAL_PATH = "C:\Users\tyung\AGENT"
+   $REMOTE_PATH = "/home/ubuntu/apps/AGENT"
    
    # Sync files (exclude node_modules, venv, etc.)
    rsync -avz --exclude 'node_modules' --exclude 'venv' --exclude '.next' --exclude '__pycache__' --exclude '.git' -e "ssh -i $KEY_PATH" $LOCAL_PATH ubuntu@${EC2_IP}:$REMOTE_PATH
@@ -191,8 +191,8 @@ Use rsync to sync files efficiently.
    #!/bin/bash
    EC2_IP="YOUR_EC2_PUBLIC_IP"
    KEY_PATH="$HOME/path/to/your-key.pem"
-   LOCAL_PATH="$HOME/hrsp_ai_hub"
-   REMOTE_PATH="/home/ubuntu/apps/hrsp_ai_hub"
+   LOCAL_PATH="$HOME/AGENT"
+   REMOTE_PATH="/home/ubuntu/apps/AGENT"
    
    rsync -avz --exclude 'node_modules' --exclude 'venv' --exclude '.next' --exclude '__pycache__' --exclude '.git' -e "ssh -i $KEY_PATH" $LOCAL_PATH ubuntu@${EC2_IP}:$REMOTE_PATH
    
@@ -273,7 +273,7 @@ Production Deployment:
 
 3. **Open Project:**
    - File → Open Folder
-   - Navigate to: `/home/ubuntu/apps/hrsp_ai_hub`
+   - Navigate to: `/home/ubuntu/apps/AGENT`
    - Start coding!
 
 ---
@@ -294,7 +294,7 @@ Production Deployment:
 4. **Backup before major changes**
    ```bash
    # On server
-   cp -r /home/ubuntu/apps/hrsp_ai_hub /home/ubuntu/apps/hrsp_ai_hub_backup
+   cp -r /home/ubuntu/apps/AGENT /home/ubuntu/apps/AGENT_backup
    ```
 
 ---

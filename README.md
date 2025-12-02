@@ -17,6 +17,8 @@ An enterprise-grade AI-powered platform that enables employees to interact with 
 - **📧 Email Verification**: New users must verify their email before logging in
 - **🔑 Password Reset**: Secure password reset via email link
 - **💬 Chat History**: Persistent chat sessions with conversation history
+- **🤖 MCP Agents**: Model Context Protocol agents for specialized tasks (demo video search, document generation, etc.)
+- **🎯 Multi-Model Support**: Support for multiple AI models (Cisco GPT-4.1, OpenAI, AWS Bedrock)
 
 ### User Interface
 - **Modern Dark Theme**: Beautiful cyan-blue gradient UI with custom scrollbars
@@ -61,7 +63,7 @@ An enterprise-grade AI-powered platform that enables employees to interact with 
 ### 1. Clone the Repository
 ```bash
 git clone <repository-url>
-cd hrsp_ai_hub
+cd AGENT
 ```
 
 ### 2. Frontend Setup
@@ -125,8 +127,8 @@ SECRET_KEY=your-secret-key-min-32-characters-change-in-production
 # Email Configuration (for verification and password reset)
 MAIL_USERNAME=your-email@gmail.com
 MAIL_PASSWORD=your-app-password
-MAIL_FROM=noreply@hrsp-ai-hub.com
-MAIL_FROM_NAME=HRSP AI Hub
+MAIL_FROM=noreply@agent.com
+MAIL_FROM_NAME=AGENT
 MAIL_SERVER=smtp.gmail.com
 MAIL_PORT=587
 MAIL_STARTTLS=true
@@ -208,7 +210,7 @@ npm start
 ## 📁 Project Structure
 
 ```
-hrsp_ai_hub/
+AGENT/
 ├── src/                          # Next.js frontend
 │   ├── app/                      # App router pages
 │   │   ├── layout.tsx           # Root layout
@@ -315,6 +317,18 @@ The platform uses RAG to provide context-aware responses:
 - **OpenAI TTS**: High-quality text-to-speech with multiple voice options
 - **Format Support**: MP3 and WAV audio formats
 
+### MCP Agents
+- **Demo Video Search**: Intelligent search for existing demo videos with YouTube integration
+- **Document Generation**: Generate PowerPoint, Word documents, and PDFs
+- **Text-to-Speech**: Convert text to audio formats (MP3, WAV)
+- **Extensible Architecture**: Easy to add new agents for custom workflows
+
+### Model Management
+- **Multiple AI Providers**: Support for Cisco GPT-4.1, OpenAI, AWS Bedrock
+- **Model Selection**: Users can select specific models or use "auto" mode
+- **Embedding Models**: Configurable embedding models (OpenAI, AWS Bedrock)
+- **Dynamic Model Loading**: Models initialized on-demand based on configuration
+
 ## 🔐 Authentication & Authorization
 
 ### User Roles
@@ -380,6 +394,10 @@ The platform uses RAG to provide context-aware responses:
 
 ### Models
 - `GET /api/models/` - List available AI models
+
+### Agents
+- `GET /api/agents/` - List available MCP agents
+- `POST /api/agents/{agent_id}/call` - Call an MCP agent
 
 ## 🎨 UI/UX Features
 

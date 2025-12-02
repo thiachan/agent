@@ -82,8 +82,8 @@ class Settings(BaseSettings):
     # Email Configuration (for verification and password reset)
     MAIL_USERNAME: str = os.getenv("MAIL_USERNAME", "")
     MAIL_PASSWORD: str = os.getenv("MAIL_PASSWORD", "")
-    MAIL_FROM: str = os.getenv("MAIL_FROM", "noreply@hrsp-ai-hub.com")
-    MAIL_FROM_NAME: str = os.getenv("MAIL_FROM_NAME", "HRSP AI Hub")
+    MAIL_FROM: str = os.getenv("MAIL_FROM", "noreply@agent.com")
+    MAIL_FROM_NAME: str = os.getenv("MAIL_FROM_NAME", "AGENT")
     MAIL_SERVER: str = os.getenv("MAIL_SERVER", "smtp.gmail.com")
     MAIL_PORT: int = int(os.getenv("MAIL_PORT", "587"))
     MAIL_STARTTLS: bool = os.getenv("MAIL_STARTTLS", "true").lower() == "true"

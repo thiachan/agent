@@ -11,12 +11,12 @@ This document explains where and how usernames and passwords are stored in the H
 **Default (SQLite):**
 - **File Path**: `backend/intranet.db` (or `backend/app.db` depending on configuration)
 - **Location**: Relative to the backend directory where the application runs
-- **Full Path Example**: `/home/ubuntu/apps/hrsp_ai_hub/backend/intranet.db`
+- **Full Path Example**: `/home/ubuntu/apps/AGENT/backend/intranet.db`
 
 **PostgreSQL (Production):**
 - **Host**: Configured in `DATABASE_URL` environment variable
 - **Database Name**: Specified in connection string
-- **Default**: `hrsp_ai_hub` (if using PostgreSQL)
+- **Default**: `AGENT` (if using PostgreSQL)
 
 ### Configuration
 
@@ -27,7 +27,7 @@ The database location is configured in `backend/.env`:
 DATABASE_URL=sqlite:///./intranet.db
 
 # PostgreSQL (Production)
-DATABASE_URL=postgresql://username:password@localhost:5432/hrsp_ai_hub
+DATABASE_URL=postgresql://username:password@localhost:5432/AGENT
 ```
 
 ---
@@ -124,7 +124,7 @@ SELECT * FROM users WHERE email = 'thiachan@pseudo-ai.com';
 
 ```bash
 # Connect to PostgreSQL
-psql -U username -d hrsp_ai_hub
+psql -U username -d AGENT
 
 # View all users
 SELECT id, email, full_name, role, is_active FROM users;
@@ -317,10 +317,10 @@ cp backend/intranet.db backend/intranet.db.$(date +%Y%m%d_%H%M%S)
 **PostgreSQL**:
 ```bash
 # Backup database
-pg_dump -U username hrsp_ai_hub > backup_$(date +%Y%m%d).sql
+pg_dump -U username AGENT > backup_$(date +%Y%m%d).sql
 
 # Restore from backup
-psql -U username hrsp_ai_hub < backup_20250115.sql
+psql -U username AGENT < backup_20250115.sql
 ```
 
 ---

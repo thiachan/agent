@@ -80,7 +80,7 @@ All packages from `package.json`:
 ### 1. Configure Environment Variables
 
 ```bash
-cd ~/apps/hrsp_ai_hub/backend
+cd ~/apps/AGENT/backend
 nano .env
 ```
 
@@ -89,7 +89,7 @@ Add your configuration (see `docs/AWS_EC2_DEPLOYMENT_GUIDE.md` for details).
 ### 2. Initialize Database
 
 ```bash
-cd ~/apps/hrsp_ai_hub/backend
+cd ~/apps/AGENT/backend
 source venv/bin/activate
 python init_db.py
 ```
@@ -97,7 +97,7 @@ python init_db.py
 ### 3. Build Frontend
 
 ```bash
-cd ~/apps/hrsp_ai_hub
+cd ~/apps/AGENT
 npm run build
 ```
 
@@ -113,7 +113,7 @@ sudo systemctl start hrsp-backend
 
 **Option B: Manual (Development)**
 ```bash
-cd ~/apps/hrsp_ai_hub/backend
+cd ~/apps/AGENT/backend
 source venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
@@ -192,7 +192,7 @@ psql --version
 nginx -v
 
 # Check Python packages
-cd ~/apps/hrsp_ai_hub/backend
+cd ~/apps/AGENT/backend
 source venv/bin/activate
 pip list | grep -E "(fastapi|uvicorn|chromadb|langchain)"
 ```

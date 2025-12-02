@@ -158,7 +158,7 @@ sudo apt install -y certbot python3-certbot-nginx
 
 # Create application directory structure
 print_status "Creating application directory structure..."
-APP_DIR="$HOME/apps/hrsp_ai_hub"
+APP_DIR="$HOME/apps/AGENT"
 mkdir -p "$APP_DIR"/backend/data/{uploads,vector_db}
 mkdir -p "$APP_DIR"/public/demo-videos
 print_status "Application directories created at: $APP_DIR"

@@ -21,8 +21,8 @@ class EmailService:
         # Email configuration from environment variables
         self.mail_username = os.getenv("MAIL_USERNAME", "")
         self.mail_password = os.getenv("MAIL_PASSWORD", "")
-        self.mail_from = os.getenv("MAIL_FROM", "noreply@hrsp-ai-hub.com")
-        self.mail_from_name = os.getenv("MAIL_FROM_NAME", "HRSP AI Hub")
+        self.mail_from = os.getenv("MAIL_FROM", "noreply@agent.com")
+        self.mail_from_name = os.getenv("MAIL_FROM_NAME", "AGENT")
         self.mail_server = os.getenv("MAIL_SERVER", "smtp.gmail.com")
         self.mail_port = int(os.getenv("MAIL_PORT", "587"))
         self.mail_starttls = os.getenv("MAIL_STARTTLS", "true").lower() == "true"
@@ -91,12 +91,12 @@ class EmailService:
             verification_url = f"{self.frontend_url}/verify-email?token={token}"
             
             message = MessageSchema(
-                subject="Verify Your Email Address - HRSP AI Hub",
+                subject="Verify Your Email Address - AGENT",
                 recipients=[email],
                 body=f"""
 Hello {full_name},
 
-Thank you for registering with HRSP AI Hub!
+Thank you for registering with AGENT!
 
 Please verify your email address by clicking the link below:
 
@@ -107,7 +107,7 @@ This link will expire in 24 hours.
 If you did not create an account, please ignore this email.
 
 Best regards,
-HRSP AI Hub Team
+AGENT Team
                 """.strip(),
                 subtype=MessageType.plain
             )
@@ -146,12 +146,12 @@ HRSP AI Hub Team
             reset_url = f"{self.frontend_url}/reset-password?token={token}"
             
             message = MessageSchema(
-                subject="Password Reset Request - HRSP AI Hub",
+                subject="Password Reset Request - AGENT",
                 recipients=[email],
                 body=f"""
 Hello {full_name},
 
-You requested to reset your password for your HRSP AI Hub account.
+You requested to reset your password for your AGENT account.
 
 Click the link below to reset your password:
 
@@ -162,7 +162,7 @@ This link will expire in 1 hour.
 If you did not request a password reset, please ignore this email and your password will remain unchanged.
 
 Best regards,
-HRSP AI Hub Team
+AGENT Team
                 """.strip(),
                 subtype=MessageType.plain
             )
