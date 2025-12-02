@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 8, 20, 40; /* deep navy */
+  --background-end-rgb: 8, 20, 40;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: #07182D;
+  min-height: 100vh;
+}
+
+/* Custom scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(30, 41, 59, 0.5); /* slate-800 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.5); /* slate-500 */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7); /* slate-400 */
+}
+
