@@ -61,13 +61,13 @@ Use Git to push changes from local, then pull on server.
    # Make changes in your IDE
    git add .
    git commit -m "Your changes"
-   git push origin cursor-v2
+   git push origin main
    ```
 
 2. **On EC2 Server**
    ```bash
    cd /home/ubuntu/apps/AGENT
-   git pull origin cursor-v2
+   git pull origin main
    
    # Restart services if needed
    sudo systemctl restart hrsp-backend
@@ -79,7 +79,7 @@ Use Git to push changes from local, then pull on server.
    ```bash
    #!/bin/bash
    cd /home/ubuntu/apps/AGENT
-   git pull origin cursor-v2
+   git pull origin main
    
    # Backend
    cd backend
