@@ -1,4 +1,4 @@
-# AI for GSSE Engineering Team (AGENT)
+# AI for GSSO Engineering Team (AGENT)
 
 An enterprise-grade AI-powered platform that enables employees to interact with business knowledge through natural language queries, powered by RAG (Retrieval Augmented Generation) and integrated with document generation capabilities.
 
@@ -14,11 +14,11 @@ An enterprise-grade AI-powered platform that enables employees to interact with 
 - **🎙️ Audio Generation**: Generate podcasts and speeches from content using OpenAI TTS (non-blocking)
 - **📝 Document Generation**: Generate Word documents and PDFs from chat content
 - **🔐 Role-Based Access Control**: Multiple user roles (admin, employee, engineer, hr, manager) with permission-based document access
-- **📧 Email Verification**: Email verification system available (currently auto-verify enabled)
+- **📧 Email Verification**: Email verification system planned for future implementation
 - **🔑 Password Reset**: Secure password reset via email link
 - **💬 Chat History**: Persistent chat sessions with conversation history
 - **🤖 MCP Agents**: Model Context Protocol agents for specialized tasks (demo video search, document generation, etc.)
-- **🎯 Multi-Model Support**: Primary model is Cisco GPT-4.1 (OAuth2), with optional support for OpenAI and AWS Bedrock
+- **🎯 AI Model**: Cisco GPT-4.1 (OAuth2) for chat, OpenAI for embeddings and TTS
 
 ### User Interface
 - **Modern Dark Theme**: Beautiful cyan-blue gradient UI with custom scrollbars
@@ -46,7 +46,7 @@ An enterprise-grade AI-powered platform that enables employees to interact with 
   - **Embeddings**: OpenAI text-embedding-3-small
   - **TTS**: OpenAI TTS API
 - **Document Processing**: PyPDF2, python-docx, python-pptx, openpyxl, pydub, moviepy, openai-whisper
-- **External Services**: Presenton.ai (PowerPoint generation), HeyGen (optional video generation)
+- **External Services**: Presenton.ai (PowerPoint generation)
 
 ## 📋 Prerequisites
 
@@ -216,10 +216,9 @@ The platform follows a modern full-stack architecture:
 - **Database**: SQLite (production-ready, can migrate to PostgreSQL) for relational data
 - **Vector Database**: ChromaDB for semantic search and document embeddings
 - **AI Integration**: 
-  - Primary: Cisco GPT-4.1 via OAuth2 (auto-refreshing tokens)
+  - Chat: Cisco GPT-4.1 via OAuth2 (auto-refreshing tokens)
   - Embeddings: OpenAI text-embedding-3-small
   - TTS: OpenAI TTS API
-  - Optional: AWS Bedrock for alternative LLMs
 
 **Key Architecture Patterns:**
 - **RAG (Retrieval-Augmented Generation)**: Documents chunked, embedded, and stored in ChromaDB. Queries retrieve relevant context before LLM generation.
@@ -347,12 +346,10 @@ The platform uses RAG to provide context-aware responses:
 - **Extensible Architecture**: Easy to add new agents for custom workflows
 
 ### Model Management
-- **Primary Model**: Cisco GPT-4.1 via OAuth2 (auto-refreshing tokens)
-- **Embedding Model**: OpenAI text-embedding-3-small (required)
+- **Chat Model**: Cisco GPT-4.1 via OAuth2 (auto-refreshing tokens, 5-minute buffer before expiration)
+- **Embedding Model**: OpenAI text-embedding-3-small (required for RAG)
 - **TTS Model**: OpenAI TTS API with multiple voices (alloy, echo, fable, onyx, nova, shimmer)
-- **Optional Models**: AWS Bedrock support for alternative LLMs (Claude, Llama, Mistral, etc.)
-- **Model Selection**: Users can select specific models or use "auto" mode (defaults to Cisco GPT-4.1)
-- **Dynamic Model Loading**: Models initialized on-demand with automatic token refresh
+- **Token Management**: Automatic OAuth2 token refresh for Cisco GPT-4.1 when expired
 
 ## 🔐 Authentication & Authorization
 
@@ -364,17 +361,15 @@ The platform uses RAG to provide context-aware responses:
 - **Manager**: Management access with specific permissions
 
 ### Authentication Flow
-1. User registers → Account created (auto-verified if email verification disabled)
+1. User registers → Account created (email verification planned for future)
 2. User logs in → JWT token is issued (24-hour expiration)
 3. Token is stored in localStorage (frontend)
 4. Token is sent with each API request in `Authorization: Bearer <token>` header
 5. Backend validates token and user permissions on each request
 
 ### Email Verification
-- **Registration**: New users can receive verification email (currently auto-verify enabled)
-- **Verification Token**: 32-byte URL-safe random token (if enabled)
-- **Token Expiry**: Verification links expire after 24 hours (if enabled)
-- **Resend**: Users can request new verification email (if enabled)
+- **Future Feature**: Email verification system is planned for future implementation
+- **Planned Features**: Verification email on registration, token-based verification, password reset via email
 
 ### Password Reset
 - **Request Reset**: User requests password reset via email
@@ -385,7 +380,7 @@ The platform uses RAG to provide context-aware responses:
 ## 📡 API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Register new user (auto-verified if email verification disabled)
+- `POST /api/auth/register` - Register new user (email verification planned for future)
 - `POST /api/auth/login` - Login user (returns JWT token with 24-hour expiration)
 - `GET /api/auth/me` - Get current user info
 - `POST /api/auth/verify-email` - Verify email address with token
@@ -478,7 +473,7 @@ The platform uses RAG to provide context-aware responses:
 
 - **JWT Tokens**: HS256 algorithm with 24-hour expiration, stored in localStorage
 - **Password Hashing**: Bcrypt with auto-generated salt (72-byte limit)
-- **Email Verification**: 32-byte URL-safe tokens with 24-hour expiration (if enabled)
+- **Email Verification**: Planned for future implementation (32-byte URL-safe tokens with 24-hour expiration)
 - **Password Reset**: 32-byte URL-safe tokens with 1-hour expiration
 - **CORS**: Explicit origin whitelist with credentials support
 - **File Validation**: Whitelist-based file type validation, 100MB size limit, path traversal prevention
@@ -535,7 +530,6 @@ Additional documentation is available in the `docs/` folder:
 - **Async Operations**: FastAPI async/await for I/O operations, non-blocking TTS generation
 - **Vector Search**: Multi-strategy search with relevance boosting for improved accuracy
 - **Token Management**: Automatic OAuth2 token refresh for Cisco GPT-4.1 (5-minute buffer before expiration)
-- **Throttling Handling**: Exponential backoff for AWS Bedrock rate limits (5 retries)
 - **Database**: SQLite with indexes on frequently queried columns (can migrate to PostgreSQL)
 - **Chunking Strategy**: Optimized chunk size (1000 chars) and overlap (200 chars) for balance between context and precision
 
@@ -560,7 +554,7 @@ For issues, questions, or contributions, please contact the development team.
 - ✅ Non-blocking audio generation (podcast and speech) using `asyncio.to_thread()`
 - ✅ Enhanced RAG with multi-strategy search and relevance boosting (filename/title/tag matching)
 - ✅ Conversation context tracking - maintains document usage across chat sessions
-- ✅ Automatic OAuth2 token refresh for Cisco GPT-4.1 (5-minute buffer)
+- ✅ Automatic OAuth2 token refresh for Cisco GPT-4.1 (5-minute buffer before expiration)
 - ✅ Support for multiple document formats (TXT, MD, CSV, JSON, JSONL added)
 - ✅ Role-based access control with multiple roles (admin, employee, engineer, hr, manager)
 - ✅ Documentation organized in `docs/` folder with deployment guides
