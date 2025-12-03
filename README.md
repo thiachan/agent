@@ -539,22 +539,10 @@ Proprietary - Enterprise License
 
 ## 👥 Support
 
-For issues, questions, or contributions, please contact the development team.
+For issues, questions, or contributions, please contact the development team - thiachan@cisco.com
 
 ---
 
 **Version**: 1.0.0  
-**Last Updated**: January 2025
+**Last Updated**: December 2025
 
-## 📋 Recent Updates
-
-- ✅ Comprehensive technical documentation added (`TECHNICAL_DOCUMENTATION.md`)
-- ✅ Password reset functionality - secure password reset via email (1-hour token expiration)
-- ✅ Demo video search with precise matching, suggestions, and YouTube integration
-- ✅ Non-blocking audio generation (podcast and speech) using `asyncio.to_thread()`
-- ✅ Enhanced RAG with multi-strategy search and relevance boosting (filename/title/tag matching)
-- ✅ Conversation context tracking - maintains document usage across chat sessions
-- ✅ Automatic OAuth2 token refresh for Cisco GPT-4.1 (5-minute buffer before expiration)
-- ✅ Support for multiple document formats (TXT, MD, CSV, JSON, JSONL added)
-- ✅ Role-based access control with multiple roles (admin, employee, engineer, hr, manager)
-- ✅ Documentation organized in `docs/` folder with deployment guides
