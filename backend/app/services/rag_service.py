@@ -488,16 +488,33 @@ class RAGService:
                 search_query = enhanced_query
         
         # Get relevant context - use the search query (which may be enhanced with topic keywords)
-        # For podcasts, retrieve more content for comprehensive coverage
-        search_limit = 20 if content_type == "podcast" else 10
+        # Phase 2: Optimized RAG Limits - Reduced chunk limits for better performance
+        # Original limits: podcast=20, others=10
+        # Optimized limits: podcast=10, speech/doc=8, QA=6
+        # Can be disabled via RAG_OPTIMIZED_LIMITS_ENABLED=false for rollback
+        if settings.RAG_OPTIMIZED_LIMITS_ENABLED:
+            # Phase 2 optimized limits (lighter system, faster responses)
+            if content_type == "podcast":
+                search_limit = 10  # Reduced from 20 (still comprehensive with better chunks)
+            elif content_type in ["speech", "doc", "ppt"]:
+                search_limit = 8  # Reduced from 10 (focused content generation)
+            else:
+                search_limit = 6  # Reduced from 10 (QA and general queries - focused)
+            logger.info(f"Phase 2: Using optimized RAG limits - {content_type or 'QA'}: {search_limit} chunks")
+        else:
+            # Original limits (for rollback)
+            search_limit = 20 if content_type == "podcast" else 10
+            logger.info(f"Using original RAG limits - {content_type or 'QA'}: {search_limit} chunks")
+        
         context_docs = self.search(search_query, user_role, limit=search_limit, previously_used_docs=previously_used_docs)
         
         # Log the search results for debugging
         if context_docs:
+            phase_info = "Phase 2 Optimized" if settings.RAG_OPTIMIZED_LIMITS_ENABLED else "Original"
             if search_query != question:
-                logger.info(f"Retrieved {len(context_docs)} document chunks for action request: '{question}' (searched using topic: '{search_query[:100]}...')")
+                logger.info(f"[{phase_info}] Retrieved {len(context_docs)}/{search_limit} document chunks for action request: '{question}' (searched using topic: '{search_query[:100]}...')")
             else:
-                logger.info(f"Retrieved {len(context_docs)} document chunks for question: '{question}'")
+                logger.info(f"[{phase_info}] Retrieved {len(context_docs)}/{search_limit} document chunks for question: '{question}'")
             for i, doc in enumerate(context_docs[:5]):  # Log top 5
                 doc_name = doc["metadata"].get("filename", doc["metadata"].get("title", "Unknown"))
                 logger.info(f"  Chunk {i+1}: From '{doc_name}' (similarity score: {doc['score']:.4f})")

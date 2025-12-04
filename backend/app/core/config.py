@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "./vector_db")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "amazon.titan-embed-text-v1")  # Default to Bedrock
     
+    # Phase 2: Optimized RAG Limits (can be disabled for rollback)
+    # Set to False to revert to original limits (10 for QA, 20 for podcast)
+    RAG_OPTIMIZED_LIMITS_ENABLED: bool = os.getenv("RAG_OPTIMIZED_LIMITS_ENABLED", "true").lower() == "true"
+    
     # External AI Services (Optional)
     # Video Generation Services
     SYNTHESIA_API_KEY: str = os.getenv("SYNTHESIA_API_KEY", "")
