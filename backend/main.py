@@ -29,8 +29,8 @@ chromadb_logger.setLevel(logging.CRITICAL)
 chromadb_logger.disabled = True
 
 app = FastAPI(
-    title="GSSE AI Center API",
-    description="GSSE AI-Powered Enterprise Platform Backend",
+    title="GSSO AI Center API",
+    description="GSSO AI-Powered Enterprise Platform Backend",
     version="1.0.0"
 )
 
@@ -67,7 +67,7 @@ app.include_router(knowledge_bases.router, prefix="/api/knowledge-bases", tags=[
 
 @app.get("/")
 async def root():
-    return {"message": "GSSE AI Center API", "version": "1.0.0"}
+    return {"message": "GSSO AI Center API", "version": "1.0.0"}
 
 @app.get("/health")
 async def health():

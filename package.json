@@ -1,7 +1,7 @@
 {
   "name": "gsse-ai-center",
   "version": "1.0.0",
-  "description": "GSSE AI-Powered Enterprise Platform",
+  "description": "GSSO AI-Powered Enterprise Platform",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",

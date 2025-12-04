@@ -1,6 +1,6 @@
 # User Credentials Storage Guide
 
-This document explains where and how usernames and passwords are stored in the HRSP AI Hub platform.
+This document explains where and how usernames and passwords are stored in the GSSO AI Hub platform.
 
 ---
 

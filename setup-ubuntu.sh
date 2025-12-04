@@ -1,15 +1,15 @@
 #!/bin/bash
 
 ###############################################################################
-# HRSP AI Hub - Complete Setup Script for Ubuntu 22.04 LTS
+# GSSO AI Hub - Complete Setup Script for Ubuntu 22.04 LTS
 # This script installs all required packages, services, and dependencies
-# for running the HRSP AI Hub platform on AWS EC2 Ubuntu
+# for running the GSSO AI Hub platform on AWS EC2 Ubuntu
 ###############################################################################
 
 set -e  # Exit on any error
 
 echo "=========================================="
-echo "HRSP AI Hub - Complete Setup Script"
+echo "GSSO AI Hub - Complete Setup Script"
 echo "=========================================="
 echo ""
 
@@ -207,7 +207,7 @@ fi
 print_status "Creating systemd service file templates..."
 sudo tee /tmp/hrsp-backend.service > /dev/null <<EOF
 [Unit]
-Description=HRSP AI Hub Backend
+Description=GSSO AI Hub Backend
 After=network.target
 
 [Service]

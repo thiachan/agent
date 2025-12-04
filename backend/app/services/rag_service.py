@@ -488,7 +488,9 @@ class RAGService:
                 search_query = enhanced_query
         
         # Get relevant context - use the search query (which may be enhanced with topic keywords)
-        context_docs = self.search(search_query, user_role, limit=10, previously_used_docs=previously_used_docs)
+        # For podcasts, retrieve more content for comprehensive coverage
+        search_limit = 20 if content_type == "podcast" else 10
+        context_docs = self.search(search_query, user_role, limit=search_limit, previously_used_docs=previously_used_docs)
         
         # Log the search results for debugging
         if context_docs:
@@ -553,7 +555,7 @@ class RAGService:
         
         # Create prompt with context and conversation history
         # PROACTIVE RAG PROMPT: Extract and present information directly
-        prompt_template = """You are an AI assistant for GSSE AI Center. Your role is to be extremely helpful by extracting, synthesizing, and presenting information directly from the uploaded documents.
+        prompt_template = """You are an AI assistant for GSSO AI Center. Your role is to be extremely helpful by extracting, synthesizing, and presenting information directly from the uploaded documents.
 
 CRITICAL INSTRUCTIONS:
 1. **USE CONVERSATION HISTORY**: If the user refers to "it", "this", "that", or uses pronouns, look at the previous conversation to understand what they're referring to. For example:
