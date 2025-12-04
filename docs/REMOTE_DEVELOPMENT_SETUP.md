@@ -127,7 +127,7 @@ Use VS Code SFTP extension to sync files automatically.
    - In your project root, create `.vscode/sftp.json`:
    ```json
    {
-       "name": "HRSP EC2",
+       "name": "GSSO EC2",
        "host": "<YOUR_EC2_PUBLIC_IP>",
        "protocol": "sftp",
        "port": 22,

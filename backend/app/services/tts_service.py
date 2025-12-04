@@ -105,6 +105,15 @@ class TTSService:
         # Parse dialogue into segments
         dialogue_segments = self._parse_dialogue(dialogue_text)
         
+        # Debug logging: show what speakers were detected
+        speakers_found = [seg["speaker"] for seg in dialogue_segments]
+        host_count = sum(1 for s in speakers_found if "host" in s.lower())
+        guest_count = sum(1 for s in speakers_found if "guest" in s.lower())
+        logger.info(f"Parsed {len(dialogue_segments)} dialogue segments: {host_count} Host, {guest_count} Guest")
+        if guest_count == 0:
+            logger.warning(f"⚠ No Guest segments detected! Speakers found: {set(speakers_found)}")
+            logger.debug(f"First 500 chars of dialogue: {dialogue_text[:500]}")
+        
         audio_data_list = []
         
         for i, segment in enumerate(dialogue_segments):
@@ -114,14 +123,19 @@ class TTSService:
             if not text.strip():
                 continue
             
-            # Determine voice based on speaker
-            if speaker.lower() in ["host", "host:"]:
+            # Determine voice based on speaker (case-insensitive, handle variations)
+            speaker_lower = speaker.lower().strip()
+            if speaker_lower in ["host", "host:"] or "host" in speaker_lower:
                 voice = self.openai_voices["host"]
-            elif speaker.lower() in ["guest", "guest:"]:
+                speaker_label = "Host"
+            elif speaker_lower in ["guest", "guest:"] or "guest" in speaker_lower:
                 voice = self.openai_voices["guest"]
+                speaker_label = "Guest"
             else:
-                # Default to host voice
+                # Default to host voice if unclear
                 voice = self.openai_voices["host"]
+                speaker_label = "Host"
+                logger.warning(f"Unknown speaker '{speaker}', defaulting to Host voice")
             
             # Generate audio for this segment
             try:
@@ -138,9 +152,9 @@ class TTSService:
                 
                 if segment_audio:
                     audio_data_list.append(segment_audio)
-                    logger.info(f"✓ Generated audio segment {i+1}/{len(dialogue_segments)} for {speaker} ({len(segment_audio)} bytes)")
+                    logger.info(f"✓ Generated audio segment {i+1}/{len(dialogue_segments)} for {speaker_label} ({len(segment_audio)} bytes)")
                 else:
-                    logger.warning(f"Empty audio segment {i+1} for {speaker}")
+                    logger.warning(f"Empty audio segment {i+1} for {speaker_label}")
                 
             except Exception as e:
                 logger.error(f"✗ Failed to generate audio for segment {i+1} ({speaker}): {e}", exc_info=True)
@@ -256,9 +270,23 @@ class TTSService:
                     current_text = []
                 continue
             
-            # Check for speaker labels: [Host]:, [Guest]:, Host:, Guest:
-            if line.startswith('[') and ']:' in line:
-                # Format: [Host]: text or [Guest]: text
+            # Check for speaker labels: [Host], [Guest], [Host]:, [Guest]:, Host:, Guest:
+            # First check for [Host] or [Guest] on their own line (most common format)
+            if line.startswith('[') and line.endswith(']'):
+                # Format: [Host] or [Guest] on its own line
+                speaker = line.strip('[]').strip()
+                # Save previous segment
+                if current_speaker and current_text:
+                    segments.append({
+                        "speaker": current_speaker,
+                        "text": " ".join(current_text)
+                    })
+                # Start new segment (text will be on next lines)
+                current_speaker = speaker
+                current_text = []
+                
+            elif line.startswith('[') and ']:' in line:
+                # Format: [Host]: text or [Guest]: text (inline format)
                 parts = line.split(']:', 1)
                 speaker = parts[0].strip('[').strip()
                 text_content = parts[1].strip() if len(parts) > 1 else ""

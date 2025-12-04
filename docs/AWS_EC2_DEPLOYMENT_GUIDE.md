@@ -1,6 +1,6 @@
 # AWS EC2 Deployment Guide - Step by Step
 
-This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 as a prototype.
+This guide will walk you through deploying your GSSO AI Hub platform to AWS EC2 as a prototype.
 
 ---
 
@@ -324,7 +324,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
    Add:
    ```ini
    [Unit]
-   Description=HRSP AI Hub Backend
+   Description=GSSO AI Hub Backend
    After=network.target
    
    [Service]
@@ -348,7 +348,7 @@ This guide will walk you through deploying your HRSP AI Hub platform to AWS EC2 
    Add:
    ```ini
    [Unit]
-   Description=HRSP AI Hub Frontend
+   Description=GSSO AI Hub Frontend
    After=network.target
    
    [Service]

@@ -129,7 +129,7 @@ export function MainPortal() {
             <div className="flex items-center space-x-2">
               <Image 
                 src="/gsse_logo.png" 
-                alt="GSSE Logo" 
+                alt="GSSO Logo" 
                 width={44} 
                 height={44} 
                 className="object-contain"

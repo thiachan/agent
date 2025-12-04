@@ -281,7 +281,7 @@ AGENT/
 │   └── uploads/                # Uploaded files storage
 │   └── vector_db/              # ChromaDB vector database
 ├── public/                      # Static assets
-│   ├── gsse_logo.png          # GSSE logo
+│   ├── gsse_logo.png          # GSSO logo
 │   └── demo-videos/           # Demo video documents
 ├── docs/                        # Documentation
 │   ├── TECHNICAL_DOCUMENTATION.md  # Comprehensive technical documentation

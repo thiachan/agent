@@ -22,7 +22,7 @@
 
 ## System Overview
 
-**AGENT (AI for GSSE Engineering Team)** is an enterprise-grade AI-powered platform that enables employees to interact with business knowledge through natural language queries. The system uses Retrieval-Augmented Generation (RAG) to provide context-aware responses based on uploaded documents.
+**AGENT (AI for GSSO Engineering Team)** is an enterprise-grade AI-powered platform that enables employees to interact with business knowledge through natural language queries. The system uses Retrieval-Augmented Generation (RAG) to provide context-aware responses based on uploaded documents.
 
 ### Key Capabilities
 
@@ -322,8 +322,8 @@ CREATE TABLE chat_messages (
 
 ```python
 app = FastAPI(
-    title="GSSE AI Center API",
-    description="GSSE AI-Powered Enterprise Platform Backend",
+    title="GSSO AI Center API",
+    description="GSSO AI-Powered Enterprise Platform Backend",
     version="1.0.0"
 )
 ```
@@ -563,7 +563,7 @@ has_access = (
 **RAG Prompt Template:**
 
 ```
-You are an AI assistant for GSSE AI Center. Your role is to be extremely helpful by extracting, synthesizing, and presenting information directly from the uploaded documents.
+You are an AI assistant for GSSO AI Center. Your role is to be extremely helpful by extracting, synthesizing, and presenting information directly from the uploaded documents.
 
 CRITICAL INSTRUCTIONS:
 1. USE CONVERSATION HISTORY: If the user refers to "it", "this", "that", or uses pronouns, look at the previous conversation to understand what they're referring to.

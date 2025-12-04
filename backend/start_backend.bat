@@ -1,5 +1,5 @@
 @echo off
-echo Starting GSSE AI Center Backend Server...
+echo Starting GSSO AI Center Backend Server...
 echo This will bind to 0.0.0.0:8000 (accessible from network)
 echo.
 cd /d %~dp0

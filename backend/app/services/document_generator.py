@@ -11,6 +11,8 @@ from app.core.config import settings
 from app.services.model_manager import model_manager
 from app.services.rag_service import rag_service
 from app.services.tts_service import tts_service
+from app.services.podcast_service import podcast_service
+from app.services.speech_service import speech_service
 import json
 import logging
 import zipfile
@@ -578,141 +580,13 @@ For professional results, consider using:
         user_context: Dict[str, Any],
         topic: Optional[str] = None
     ) -> str:
-        """Generate only the podcast dialogue script (without audio)"""
-        try:
-            # Use LLM to generate a dialogue between 2 people
-            dialogue_prompt = f"""Create a natural, engaging, and comprehensive podcast dialogue between two people by extracting ALL key information from the content below. 
-
-CRITICAL INSTRUCTIONS:
-1. **EXTRACT ALL KEY POINTS**: Dig deep and extract ALL important information, features, benefits, details, and examples from the content. Include specific details, not just summaries.
-
-2. **BE COMPREHENSIVE**: Include all relevant information that would be valuable to listeners. Extract numbers, statistics, specific features, benefits, use cases, and technical details.
-
-3. **SYNTHESIZE INFORMATION**: Combine related information from different parts of the content to create a cohesive discussion.
-
-4. **INCLUDE ALL DETAILS**: Don't skip important details. If the content mentions specific features, benefits, or examples, include them all in the dialogue.
-
-Make it conversational, informative, comprehensive, and easy to follow. Format it as a script with clear speaker labels.
-
-Topic: {topic or 'Business Content'}
-Content to extract information from (extract ALL key points):
-{content[:2000]}
-
-Format the dialogue like this:
-[Host]: Welcome to today's podcast. Let's discuss...
-[Guest]: Thanks for having me. I think...
-[Host]: That's interesting. Can you elaborate on...
-[Guest]: Absolutely. The key point is...
-
-Continue the dialogue for about 10-15 exchanges, extracting and including ALL important information from the content. Make it informative, engaging, and comprehensive. End with a natural conclusion."""
-
-            # Get the LLM model
-            try:
-                llm = model_manager.get_chat_model(model_id="auto", temperature=0.7)
-            except Exception as e:
-                logger.warning(f"Could not get LLM for dialogue generation: {e}")
-                # Fallback: create a simple dialogue from content
-                return self._create_simple_dialogue(content, topic)
-            else:
-                # Generate dialogue using LLM
-                from langchain.schema import HumanMessage
-                from langchain_openai import AzureChatOpenAI, ChatOpenAI
-                from langchain_aws import ChatBedrock, BedrockLLM
-                
-                try:
-                    if isinstance(llm, ChatBedrock):
-                        # ChatBedrock with retry logic for throttling
-                        import time
-                        messages = [HumanMessage(content=dialogue_prompt)]
-                        max_retries = 5
-                        base_delay = 2
-                        
-                        for attempt in range(max_retries):
-                            try:
-                                # Run blocking LLM call in thread pool
-                                response = await asyncio.to_thread(llm.invoke, messages)
-                                break
-                            except Exception as bedrock_error:
-                                error_str = str(bedrock_error)
-                                is_throttling = (
-                                    "ThrottlingException" in error_str or 
-                                    "Too many requests" in error_str or
-                                    "throttl" in error_str.lower()
-                                )
-                                
-                                if is_throttling and attempt < max_retries - 1:
-                                    delay = base_delay * (2 ** attempt) + (attempt * 0.5)
-                                    logger.warning(f"Bedrock throttling in dialogue generation (attempt {attempt + 1}/{max_retries}). Retrying in {delay:.1f}s...")
-                                    await asyncio.sleep(delay)
-                                    continue
-                                
-                                if is_throttling:
-                                    raise ValueError(f"AWS Bedrock rate limit exceeded. Please wait 30-60 seconds and try again.")
-                                    raise
-                    elif isinstance(llm, (AzureChatOpenAI, ChatOpenAI)):
-                        messages = [HumanMessage(content=dialogue_prompt)]
-                        # Add user parameter for Cisco if needed
-                        invoke_kwargs = {}
-                        if isinstance(llm, AzureChatOpenAI) and settings.CISCO_APPKEY:
-                            user_data = {"appkey": settings.CISCO_APPKEY}
-                            invoke_kwargs["user"] = json.dumps(user_data)
-                        # Run blocking LLM call in thread pool
-                        response = await asyncio.to_thread(llm.invoke, messages, **invoke_kwargs)
-                    elif isinstance(llm, BedrockLLM):
-                        # BedrockLLM with retry logic for throttling
-                        import time
-                        max_retries = 5
-                        base_delay = 2
-                        
-                        for attempt in range(max_retries):
-                            try:
-                                # Run blocking LLM call in thread pool
-                                response = await asyncio.to_thread(llm.invoke, dialogue_prompt)
-                                break
-                            except Exception as bedrock_error:
-                                error_str = str(bedrock_error)
-                                is_throttling = (
-                                    "ThrottlingException" in error_str or 
-                                    "Too many requests" in error_str or
-                                    "throttl" in error_str.lower()
-                                )
-                                
-                                if is_throttling and attempt < max_retries - 1:
-                                    delay = base_delay * (2 ** attempt) + (attempt * 0.5)
-                                    logger.warning(f"Bedrock throttling in dialogue generation (attempt {attempt + 1}/{max_retries}). Retrying in {delay:.1f}s...")
-                                    await asyncio.sleep(delay)
-                                    continue
-                                
-                                if is_throttling:
-                                    raise ValueError(f"AWS Bedrock rate limit exceeded. Please wait 30-60 seconds and try again.")
-                                raise
-                    elif isinstance(llm, ChatOpenAI):
-                        # ChatOpenAI also uses messages format
-                        messages = [HumanMessage(content=dialogue_prompt)]
-                        # Run blocking LLM call in thread pool
-                        response = await asyncio.to_thread(llm.invoke, messages)
-                    else:
-                        # Fallback for other model types
-                        messages = [HumanMessage(content=dialogue_prompt)]
-                        # Run blocking LLM call in thread pool
-                        response = await asyncio.to_thread(llm.invoke, messages)
-                    
-                    # Extract dialogue text
-                    if hasattr(response, 'content'):
-                        dialogue = response.content
-                    elif isinstance(response, str):
-                        dialogue = response
-                    else:
-                        dialogue = str(response)
-                    
-                    logger.info(f"Generated podcast script ({len(dialogue)} characters)")
-                    return dialogue
-                except Exception as e:
-                    logger.error(f"Error generating dialogue with LLM: {e}")
-                    return self._create_simple_dialogue(content, topic)
-        except Exception as e:
-            logger.error(f"Error in podcast script generation: {e}")
-            return self._create_simple_dialogue(content, topic)
+        """Generate only the podcast dialogue script (without audio) - delegates to independent PodcastService"""
+        # Delegate to independent PodcastService - completely isolated
+        return await podcast_service.generate_script(
+            content=content,
+            topic=topic,
+            user_context=user_context
+        )
     
     async def _generate_podcast(
         self, 
@@ -722,7 +596,7 @@ Continue the dialogue for about 10-15 exchanges, extracting and including ALL im
         session_id: Optional[int] = None,
         topic: Optional[str] = None
     ) -> Tuple[bytes, str, str]:
-        """Generate a podcast dialogue script (and optionally audio) from content"""
+        """Generate a podcast dialogue script (and optionally audio) from content - delegates to independent PodcastService"""
         # Check if content is already a dialogue script
         is_script = "[Host]" in content or "[Guest]" in content or "[host]" in content or "[guest]" in content
         
@@ -731,139 +605,12 @@ Continue the dialogue for about 10-15 exchanges, extracting and including ALL im
             dialogue = content
             logger.info("Content is already a podcast script, using it directly")
         else:
-            # Generate dialogue script from content
-            try:
-                # Use LLM to generate a dialogue between 2 people
-                dialogue_prompt = f"""Create a natural, engaging, and comprehensive podcast dialogue between two people by extracting ALL key information from the content below. 
-
-CRITICAL INSTRUCTIONS:
-1. **EXTRACT ALL KEY POINTS**: Dig deep and extract ALL important information, features, benefits, details, and examples from the content. Include specific details, not just summaries.
-
-2. **BE COMPREHENSIVE**: Include all relevant information that would be valuable to listeners. Extract numbers, statistics, specific features, benefits, use cases, and technical details.
-
-3. **SYNTHESIZE INFORMATION**: Combine related information from different parts of the content to create a cohesive discussion.
-
-4. **INCLUDE ALL DETAILS**: Don't skip important details. If the content mentions specific features, benefits, or examples, include them all in the dialogue.
-
-Make it conversational, informative, comprehensive, and easy to follow. Format it as a script with clear speaker labels.
-
-Topic: {topic or 'Business Content'}
-Content to extract information from (extract ALL key points):
-{content[:2000]}
-
-Format the dialogue like this:
-[Host]: Welcome to today's podcast. Let's discuss...
-[Guest]: Thanks for having me. I think...
-[Host]: That's interesting. Can you elaborate on...
-[Guest]: Absolutely. The key point is...
-
-Continue the dialogue for about 10-15 exchanges, extracting and including ALL important information from the content. Make it informative, engaging, and comprehensive. End with a natural conclusion."""
-
-                # Get the LLM model
-                try:
-                    llm = model_manager.get_chat_model(model_id="auto", temperature=0.7)
-                except Exception as e:
-                    logger.warning(f"Could not get LLM for dialogue generation: {e}")
-                    # Fallback: create a simple dialogue from content
-                    dialogue = self._create_simple_dialogue(content, topic)
-                else:
-                    # Generate dialogue using LLM
-                    from langchain.schema import HumanMessage
-                    from langchain_openai import AzureChatOpenAI, ChatOpenAI
-                    from langchain_aws import ChatBedrock, BedrockLLM
-                    
-                    try:
-                        # Run LLM calls in thread pool to avoid blocking event loop
-                        import asyncio
-                        
-                        async def invoke_llm():
-                            if isinstance(llm, ChatBedrock):
-                                # ChatBedrock with retry logic for throttling
-                                import time
-                                messages = [HumanMessage(content=dialogue_prompt)]
-                                max_retries = 5
-                                base_delay = 2
-                                
-                                for attempt in range(max_retries):
-                                    try:
-                                        response = await asyncio.to_thread(llm.invoke, messages)
-                                        return response
-                                    except Exception as bedrock_error:
-                                        error_str = str(bedrock_error)
-                                        is_throttling = (
-                                            "ThrottlingException" in error_str or 
-                                            "Too many requests" in error_str or
-                                            "throttl" in error_str.lower()
-                                        )
-                                        
-                                        if is_throttling and attempt < max_retries - 1:
-                                            delay = base_delay * (2 ** attempt) + (attempt * 0.5)
-                                            logger.warning(f"Bedrock throttling in dialogue generation (attempt {attempt + 1}/{max_retries}). Retrying in {delay:.1f}s...")
-                                            await asyncio.sleep(delay)
-                                            continue
-                                        
-                                        if is_throttling:
-                                            raise ValueError(f"AWS Bedrock rate limit exceeded. Please wait 30-60 seconds and try again.")
-                                        raise
-                            elif isinstance(llm, (AzureChatOpenAI, ChatOpenAI)):
-                                messages = [HumanMessage(content=dialogue_prompt)]
-                                # Add user parameter for Cisco if needed
-                                invoke_kwargs = {}
-                                if isinstance(llm, AzureChatOpenAI) and settings.CISCO_APPKEY:
-                                    user_data = {"appkey": settings.CISCO_APPKEY}
-                                    invoke_kwargs["user"] = json.dumps(user_data)
-                                return await asyncio.to_thread(llm.invoke, messages, **invoke_kwargs)
-                            elif isinstance(llm, BedrockLLM):
-                                # BedrockLLM with retry logic for throttling
-                                import time
-                                max_retries = 5
-                                base_delay = 2
-                                
-                                for attempt in range(max_retries):
-                                    try:
-                                        response = await asyncio.to_thread(llm.invoke, dialogue_prompt)
-                                        return response
-                                    except Exception as bedrock_error:
-                                        error_str = str(bedrock_error)
-                                        is_throttling = (
-                                            "ThrottlingException" in error_str or 
-                                            "Too many requests" in error_str or
-                                            "throttl" in error_str.lower()
-                                        )
-                                        
-                                        if is_throttling and attempt < max_retries - 1:
-                                            delay = base_delay * (2 ** attempt) + (attempt * 0.5)
-                                            logger.warning(f"Bedrock throttling in dialogue generation (attempt {attempt + 1}/{max_retries}). Retrying in {delay:.1f}s...")
-                                            await asyncio.sleep(delay)
-                                            continue
-                                        
-                                        if is_throttling:
-                                            raise ValueError(f"AWS Bedrock rate limit exceeded. Please wait 30-60 seconds and try again.")
-                                        raise
-                            elif isinstance(llm, ChatOpenAI):
-                                # ChatOpenAI also uses messages format
-                                messages = [HumanMessage(content=dialogue_prompt)]
-                                return await asyncio.to_thread(llm.invoke, messages)
-                            else:
-                                # Fallback for other model types
-                                messages = [HumanMessage(content=dialogue_prompt)]
-                                return await asyncio.to_thread(llm.invoke, messages)
-                        
-                        response = await invoke_llm()
-                        
-                        # Extract dialogue text
-                        if hasattr(response, 'content'):
-                            dialogue = response.content
-                        elif isinstance(response, str):
-                            dialogue = response
-                        else:
-                            dialogue = str(response)
-                    except Exception as e:
-                        logger.error(f"Error generating dialogue with LLM: {e}")
-                        dialogue = self._create_simple_dialogue(content, topic)
-            except Exception as e:
-                logger.error(f"Error in podcast generation: {e}")
-                dialogue = self._create_simple_dialogue(content, topic)
+            # Delegate to independent PodcastService - completely isolated
+            dialogue = await podcast_service.generate_script(
+                content=content,
+                topic=topic,
+                user_context=user_context
+            )
         
         # Try to generate actual audio using TTS service
         # Run TTS in a thread pool to avoid blocking the event loop
@@ -873,12 +620,14 @@ Continue the dialogue for about 10-15 exchanges, extracting and including ALL im
             
             logger.info(f"Generating {audio_format.upper()} audio from dialogue using TTS service...")
             # Run blocking TTS call in thread pool to avoid freezing UI
+            # Explicitly enable dialogue mode for podcast (Host/Guest voices)
             audio_data = await asyncio.to_thread(
                 tts_service.text_to_speech,
                 text=dialogue,
                 audio_format=audio_format,
                 language="en",
-                slow=False
+                slow=False,
+                use_dialogue=True  # Explicitly enable dialogue parsing for Host/Guest
             )
             
             # Return audio file
@@ -921,6 +670,53 @@ To convert to audio manually, you can use:
             
             return output.getvalue(), filename, content_type
     
+    def _validate_and_fix_dialogue_format(self, dialogue: str) -> str:
+        """Validate and fix common dialogue format issues"""
+        if not dialogue:
+            return dialogue
+        
+        lines = dialogue.split('\n')
+        fixed_lines = []
+        last_speaker = None
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                fixed_lines.append('')
+                continue
+            
+            # Check if this line starts with a speaker tag
+            if line.startswith('[Host]') or line.startswith('[host]'):
+                current_speaker = '[Host]'
+            elif line.startswith('[Guest]') or line.startswith('[guest]'):
+                current_speaker = '[Guest]'
+            else:
+                # Not a speaker line, keep as is (might be continuation)
+                fixed_lines.append(line)
+                continue
+            
+            # Fix capitalization
+            if line.startswith('[host]'):
+                line = '[Host]' + line[6:]
+            elif line.startswith('[guest]'):
+                line = '[Guest]' + line[7:]
+            
+            # Check for consecutive same speakers
+            if last_speaker == current_speaker:
+                # Alternate to the other speaker
+                if current_speaker == '[Host]':
+                    line = '[Guest]' + line[6:]
+                    current_speaker = '[Guest]'
+                else:
+                    line = '[Host]' + line[7:]
+                    current_speaker = '[Host]'
+                logger.debug(f"Fixed consecutive speaker: changed to {current_speaker}")
+            
+            fixed_lines.append(line)
+            last_speaker = current_speaker
+        
+        return '\n'.join(fixed_lines)
+    
     def _create_simple_dialogue(self, content: str, topic: Optional[str] = None) -> str:
         """Create a simple dialogue from content when LLM is not available"""
         lines = content.split('\n')[:10]  # Take first 10 lines
@@ -945,139 +741,18 @@ To convert to audio manually, you can use:
         topic: Optional[str] = None,
         audio_format: str = "mp3"
     ) -> Tuple[bytes, str, str]:
-        """Generate a speech/monologue (single voice) from content"""
+        """Generate a speech/monologue (single voice) from content - delegates to independent SpeechService"""
         import time
         
         try:
-            # Use LLM to generate a well-structured speech/monologue
-            speech_text = None
-            
-            try:
-                llm = model_manager.get_chat_model(model_id="auto", temperature=0.7)
-            except Exception as e:
-                logger.warning(f"Could not get LLM for speech generation: {e}")
-                # Fallback: use content directly as speech
-                speech_text = content
-            else:
-                # Generate speech using LLM
-                from langchain.schema import HumanMessage
-                from langchain_openai import AzureChatOpenAI, ChatOpenAI
-                from langchain_aws import ChatBedrock, BedrockLLM
-                
-                speech_prompt = f"""Create a compelling, comprehensive, and well-structured speech or monologue by extracting ALL key information from the content below. 
+            # Delegate to independent SpeechService - completely isolated
+            speech_text = await speech_service.generate_script(
+                content=content,
+                topic=topic,
+                user_context=user_context
+            )
 
-CRITICAL INSTRUCTIONS:
-1. **EXTRACT ALL KEY POINTS**: Dig deep and extract ALL important information, features, benefits, details, and examples from the content. Don't just summarize - include specific details.
-
-2. **BE COMPREHENSIVE**: Include all relevant information that would be valuable to the audience. Extract numbers, statistics, specific features, benefits, use cases, and technical details.
-
-3. **SYNTHESIZE INFORMATION**: Combine related information from different parts of the content to create a cohesive narrative.
-
-4. **INCLUDE ALL DETAILS**: Don't skip important details. If the content mentions specific features, benefits, or examples, include them all in the speech.
-
-The speech should be:
-- Clear, engaging, and comprehensive
-- Well-organized with a natural flow
-- Suitable for spoken delivery
-- About 2-3 minutes when read aloud (approximately 300-500 words)
-- Have a clear introduction, main points with all details, and conclusion
-
-Topic: {topic or 'Business Content'}
-
-Content to extract information from (extract ALL key points):
-{content[:2000]}
-
-Write the speech as a single, continuous monologue (no dialogue markers, no [Host] or [Guest] labels). Extract and include ALL important information from the content above. Make it sound natural and conversational, as if someone is giving a presentation or speech."""
-
-                try:
-                    import asyncio
-                    
-                    if isinstance(llm, ChatBedrock):
-                        # ChatBedrock with retry logic for throttling
-                        messages = [HumanMessage(content=speech_prompt)]
-                        max_retries = 5
-                        base_delay = 2
-                        
-                        for attempt in range(max_retries):
-                            try:
-                                # Run blocking LLM call in thread pool
-                                response = await asyncio.to_thread(llm.invoke, messages)
-                                break
-                            except Exception as bedrock_error:
-                                error_str = str(bedrock_error)
-                                is_throttling = (
-                                    "ThrottlingException" in error_str or 
-                                    "Too many requests" in error_str or
-                                    "throttl" in error_str.lower()
-                                )
-                                
-                                if is_throttling and attempt < max_retries - 1:
-                                    delay = base_delay * (2 ** attempt) + (attempt * 0.5)
-                                    logger.warning(f"Bedrock throttling in speech generation (attempt {attempt + 1}/{max_retries}). Retrying in {delay:.1f}s...")
-                                    await asyncio.sleep(delay)
-                                    continue
-                                
-                                if is_throttling:
-                                    raise ValueError(f"AWS Bedrock rate limit exceeded. Please wait 30-60 seconds and try again.")
-                                raise
-                    elif isinstance(llm, BedrockLLM):
-                        # BedrockLLM with retry logic for throttling
-                        max_retries = 5
-                        base_delay = 2
-                        
-                        for attempt in range(max_retries):
-                            try:
-                                # Run blocking LLM call in thread pool
-                                response = await asyncio.to_thread(llm.invoke, speech_prompt)
-                                break
-                            except Exception as bedrock_error:
-                                error_str = str(bedrock_error)
-                                is_throttling = (
-                                    "ThrottlingException" in error_str or 
-                                    "Too many requests" in error_str or
-                                    "throttl" in error_str.lower()
-                                )
-                                
-                                if is_throttling and attempt < max_retries - 1:
-                                    delay = base_delay * (2 ** attempt) + (attempt * 0.5)
-                                    logger.warning(f"Bedrock throttling in speech generation (attempt {attempt + 1}/{max_retries}). Retrying in {delay:.1f}s...")
-                                    await asyncio.sleep(delay)
-                                    continue
-                                
-                                if is_throttling:
-                                    raise ValueError(f"AWS Bedrock rate limit exceeded. Please wait 30-60 seconds and try again.")
-                                raise
-                    elif isinstance(llm, (AzureChatOpenAI, ChatOpenAI)):
-                        messages = [HumanMessage(content=speech_prompt)]
-                        # Add user parameter for Cisco if needed
-                        invoke_kwargs = {}
-                        if isinstance(llm, AzureChatOpenAI) and settings.CISCO_APPKEY:
-                            user_data = {"appkey": settings.CISCO_APPKEY}
-                            invoke_kwargs["user"] = json.dumps(user_data)
-                        # Run blocking LLM call in thread pool
-                        response = await asyncio.to_thread(llm.invoke, messages, **invoke_kwargs)
-                    else:
-                        messages = [HumanMessage(content=speech_prompt)]
-                        # Run blocking LLM call in thread pool
-                        response = await asyncio.to_thread(llm.invoke, messages)
-                    
-                    # Extract speech text
-                    if hasattr(response, 'content'):
-                        speech_text = response.content
-                    elif isinstance(response, str):
-                        speech_text = response
-                    else:
-                        speech_text = str(response)
-                    
-                    logger.info(f"Generated speech text ({len(speech_text)} characters)")
-                except Exception as e:
-                    logger.error(f"Error generating speech with LLM: {e}", exc_info=True)
-                    # Fallback: use content directly
-                    speech_text = content
-            
-            # If speech_text is still None, use content as fallback
-            if not speech_text:
-                speech_text = content
+            # speech_text is now generated by SpeechService
             
             # Generate audio using TTS service (single voice, no dialogue parsing)
             # Run TTS in a thread pool to avoid blocking the event loop
