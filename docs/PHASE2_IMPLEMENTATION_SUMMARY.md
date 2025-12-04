@@ -21,7 +21,7 @@
 | Content Type | Original | Phase 2 | Reduction |
 |-------------|----------|---------|-----------|
 | **Podcast** | 20 chunks | 10 chunks | 50% |
-| **Speech/Doc/PPT** | 10 chunks | 8 chunks | 20% |
+| **Speech/Doc/PPT/MP4** | 10 chunks | 8 chunks | 20% |
 | **QA/General** | 10 chunks | 6 chunks | 40% |
 
 ### Expected Benefits

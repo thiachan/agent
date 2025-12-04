@@ -44,7 +44,7 @@ Change `"true"` to `"false"` to disable by default.
 
 ### Phase 2 Optimized Limits
 - **Podcast**: 10 chunks (50% reduction)
-- **Speech/Doc/PPT**: 8 chunks (20% reduction)
+- **Speech/Doc/PPT/MP4**: 8 chunks (20% reduction)
 - **QA/General**: 6 chunks (40% reduction)
 
 ### Expected Impact

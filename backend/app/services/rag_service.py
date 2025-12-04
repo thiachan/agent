@@ -490,14 +490,18 @@ class RAGService:
         # Get relevant context - use the search query (which may be enhanced with topic keywords)
         # Phase 2: Optimized RAG Limits - Reduced chunk limits for better performance
         # Original limits: podcast=20, others=10
-        # Optimized limits: podcast=10, speech/doc=8, QA=6
+        # Optimized limits: podcast=10, speech/doc/ppt/mp4=8, QA=6
         # Can be disabled via RAG_OPTIMIZED_LIMITS_ENABLED=false for rollback
-        if settings.RAG_OPTIMIZED_LIMITS_ENABLED:
+        # Store in variable to avoid repeated access and for use in logging
+        # Import settings at function level to avoid scope issues
+        from app.core.config import settings as app_settings
+        rag_optimized_enabled = getattr(app_settings, 'RAG_OPTIMIZED_LIMITS_ENABLED', True)
+        if rag_optimized_enabled:
             # Phase 2 optimized limits (lighter system, faster responses)
             if content_type == "podcast":
                 search_limit = 10  # Reduced from 20 (still comprehensive with better chunks)
-            elif content_type in ["speech", "doc", "ppt"]:
-                search_limit = 8  # Reduced from 10 (focused content generation)
+            elif content_type in ["speech", "doc", "ppt", "mp4"]:
+                search_limit = 8  # Reduced from 10 (focused content generation - includes video/mp4)
             else:
                 search_limit = 6  # Reduced from 10 (QA and general queries - focused)
             logger.info(f"Phase 2: Using optimized RAG limits - {content_type or 'QA'}: {search_limit} chunks")
@@ -510,7 +514,7 @@ class RAGService:
         
         # Log the search results for debugging
         if context_docs:
-            phase_info = "Phase 2 Optimized" if settings.RAG_OPTIMIZED_LIMITS_ENABLED else "Original"
+            phase_info = "Phase 2 Optimized" if rag_optimized_enabled else "Original"
             if search_query != question:
                 logger.info(f"[{phase_info}] Retrieved {len(context_docs)}/{search_limit} document chunks for action request: '{question}' (searched using topic: '{search_query[:100]}...')")
             else:
