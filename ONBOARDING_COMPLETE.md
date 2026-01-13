@@ -21,9 +21,10 @@
 ### For Development (Local Machine)
 
 ```bash
-# 1. Clone repository
+# 1. Clone repository and checkout latest stable branch
 git clone https://github.com/thiachan/agent.git
 cd agent
+git checkout vscode-optimized-v1  # ⭐ Latest stable version with all improvements
 
 # 2. Setup backend
 cd backend
@@ -35,12 +36,16 @@ pip install -r requirements.txt
 cd ..
 npm install
 
-# 4. Initialize database
+# 4. Create environment files
+cd backend
+nano .env  # Copy template from "Environment Configuration" section below
+cd ..
+nano .env.local
+# Add: NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# 5. Initialize database
 cd backend
 python init_db.py
-
-# 5. Create .env file
-cp .env.example .env  # Or create manually - see section below
 
 # 6. Start backend (terminal 1)
 source venv/bin/activate
@@ -53,44 +58,66 @@ npm run dev
 # 8. Access application
 # Frontend: http://localhost:3000
 # API Docs: http://localhost:8000/docs
+# Default login: thiachan@pseudo-ai.com / password123
 ```
+
+⭐ **Important Notes**:
+- Always checkout `vscode-optimized-v1` branch for latest stable version
+- There is no `.env.example` - copy the template from the Environment Configuration section
+- Create `.env` in `backend/` and `.env.local` in project root
+- Change default admin password before production use
+
 
 ### For Production (AWS EC2)
 
 ```bash
-# 1. SSH into EC2 instance
 ssh -i "your-key.pem" ubuntu@<EC2_PUBLIC_IP>
 
-# 2. Run setup script
+# 1. Run setup script
 chmod +x setup-ubuntu.sh
 ./setup-ubuntu.sh
 
-# 3. Clone repository
+# 2. Clone repository and checkout latest stable branch
 git clone https://github.com/thiachan/agent.git
 cd agent
+git checkout vscode-optimized-v1  # ⭐ Latest stable version with all improvements
 
-# 4. Configure environment (see Environment Setup section)
+# 3. Create environment configuration (see template in Environment Configuration section)
 nano backend/.env
+# Copy all required variables from the template below
 
-# 5. Initialize database
+# 4. Initialize database and build frontend
 cd backend
 source venv/bin/activate
 python init_db.py
-
-# 6. Build frontend
 cd ..
 npm run build
 
-# 7. Start services
+# 5. Start services
 ./start-services.sh
 
-# 8. Configure Nginx (see Nginx Configuration section)
+# 6. Configure Nginx reverse proxy
 sudo nano /etc/nginx/sites-available/agent.alexcty.com
+# Copy configuration from Nginx Configuration section
 
-# 9. Test and verify
+# 7. Enable and reload Nginx
+sudo ln -s /etc/nginx/sites-available/agent.alexcty.com /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+
+# 8. Test and verify
 curl http://localhost:8000/health
 curl http://localhost:3000
+curl https://yourdomain.com/api/health  # After Nginx is configured
 ```
+
+⭐ **Critical for Production**:
+- Checkout `vscode-optimized-v1` branch for all improvements
+- Configure all required `.env` variables before starting services
+- Set up Nginx reverse proxy for SSL/HTTPS
+- Change default admin password from "password123"
+- Use AWS Secrets Manager for storing sensitive credentials
+
 
 ---
 
@@ -114,9 +141,14 @@ curl http://localhost:3000
 
 #### 1.2 Environment Variables Configuration
 
-Create `backend/.env` with the following essential variables:
+Create `backend/.env` with the following essential variables (see template below):
 
-```env
+```bash
+cd backend
+nano .env  # Or use your preferred editor
+```
+
+Add the following content to `backend/.env`:
 # ==============================================================================
 # ESSENTIAL ENVIRONMENT VARIABLES (Minimal Production Config)
 # ==============================================================================
@@ -162,18 +194,18 @@ FRONTEND_URL=http://localhost:3000
 - For production, use secure secret management (AWS Secrets Manager)
 - Use environment-specific `.env` files or configuration management
 
-#### 1.3 Git Setup
+### 1.3 Git Setup
 
 ```bash
 # Clone the repository
 git clone https://github.com/thiachan/agent.git
 cd agent
 
-# Verify you're on vscode-optimized-v1 branch (latest stable)
+# Checkout vscode-optimized-v1 branch (latest stable with all improvements)
 git checkout vscode-optimized-v1
 
-# Or switch to main branch (production)
-git checkout main
+# Verify you're on the correct branch
+git branch -v  # Should show: * vscode-optimized-v1
 ```
 
 ---
