@@ -53,6 +53,7 @@ export function DocumentUpload() {
   const [newKBName, setNewKBName] = useState('')
   const [newKBDescription, setNewKBDescription] = useState('')
   const [showDocumentsView, setShowDocumentsView] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
   const { isAuthenticated } = useAuthStore()
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -577,27 +578,27 @@ export function DocumentUpload() {
       <div className="px-6 py-4 border-b border-slate-700/50 bg-slate-800/30 backdrop-blur-sm flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Knowledge Bases</h1>
-            <p className="text-sm text-gray-400 mt-1">Manage your document collections and training data.</p>
+            <h1 className="text-base font-bold text-white">Knowledge bases</h1>
+            <p className="text-xs text-gray-400 mt-1">Manage your document collections and training data</p>
           </div>
           <div className="flex items-center space-x-3">
             <button 
               onClick={() => setShowDocumentsView(!showDocumentsView)}
-              className={`px-4 py-2 text-sm rounded-lg transition-colors flex items-center space-x-2 ${
+              className={`px-3 py-1.5 text-xs rounded-lg transition-colors flex items-center space-x-2 ${
                 showDocumentsView 
                   ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-white border border-cyan-400/30' 
                   : 'text-gray-300 hover:text-white hover:bg-slate-700/50'
               }`}
             >
               <FileText className="w-4 h-4" />
-              <span>Documents</span>
+              <span>documents</span>
             </button>
             <button
               onClick={() => setShowNewKBModal(true)}
-              className="px-4 py-2 text-sm bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-400 hover:to-purple-500 transition-all font-medium flex items-center space-x-2 shadow-lg shadow-pink-500/20"
+              className="px-3 py-1.5 text-xs bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-400 hover:to-purple-500 transition-all font-medium flex items-center space-x-2 shadow-lg shadow-pink-500/20"
             >
               <Plus className="w-4 h-4" />
-              <span>New Knowledge Base</span>
+              <span>New knowledge base</span>
             </button>
           </div>
         </div>
@@ -619,7 +620,6 @@ export function DocumentUpload() {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">File Name</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">File Size</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Permission</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Category</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Upload Date</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
@@ -629,7 +629,7 @@ export function DocumentUpload() {
                   <tbody className="divide-y divide-slate-700/50">
                     {documents.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-400 text-xs">
                           No documents uploaded yet
                         </td>
                       </tr>
@@ -639,30 +639,24 @@ export function DocumentUpload() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center space-x-2">
                               <File className="w-4 h-4 text-cyan-400" />
-                              <span className="text-sm text-white" title={doc.filename || doc.title}>
+                              <span className="text-xs text-white" title={doc.filename || doc.title}>
                                 {doc.title || doc.filename}
                               </span>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="text-sm text-gray-300">{formatFileSize(doc.file_size)}</span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-1">
-                              <User className="w-4 h-4 text-gray-400" />
-                              <span className="text-sm text-gray-300">{getDocumentPermission(doc)}</span>
-                            </div>
+                            <span className="text-xs text-gray-300">{formatFileSize(doc.file_size)}</span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center space-x-1">
                               <Folder className="w-4 h-4 text-gray-400" />
-                              <span className="text-sm text-gray-300">{getDocumentCategory(doc)}</span>
+                              <span className="text-xs text-gray-300">{getDocumentCategory(doc)}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center space-x-1">
                               <Calendar className="w-4 h-4 text-gray-400" />
-                              <span className="text-sm text-gray-300">{formatDateTime(doc.created_at)}</span>
+                              <span className="text-xs text-gray-300">{formatDateTime(doc.created_at)}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -680,7 +674,7 @@ export function DocumentUpload() {
                               </span>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-xs font-medium">
                             <button
                               onClick={() => deleteDocument(doc.id)}
                               className="text-red-400 hover:text-red-300 transition-colors"
@@ -708,7 +702,7 @@ export function DocumentUpload() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center space-x-2 flex-1 min-w-0">
                     <CheckCircle2 className="text-green-500 w-5 h-5 flex-shrink-0" />
-                    <h3 className="text-lg font-semibold text-white truncate">{kb.name}</h3>
+                    <h3 className="text-base font-semibold text-white truncate">{kb.name}</h3>
                   </div>
                   <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
@@ -738,13 +732,13 @@ export function DocumentUpload() {
                   <span className="text-xs text-green-400 font-medium">Processed</span>
                 </div>
                 
-                <p className="text-sm text-gray-400 mb-4">{kb.description}</p>
+                <p className="text-xs text-gray-400 mb-4">{kb.description}</p>
                 
                 <div className="mb-4 space-y-2">
-                  <div className="text-sm text-gray-300">
+                  <div className="text-xs text-gray-300">
                     Documents: <span className="font-medium">{kb.documents.length}</span>
                   </div>
-                  <div className="text-sm text-gray-300">
+                  <div className="text-xs text-gray-300">
                     Status: <span className={kb.documents.length === 0 ? 'text-gray-500' : 'text-green-400'}>
                       {kb.documents.length === 0 ? 'Empty' : 'Active'}
                     </span>
@@ -753,14 +747,13 @@ export function DocumentUpload() {
                 
                 <div className="mb-4">
                   <button
-                    onClick={() => setSelectedKB(selectedKB === kb.kb_id ? null : kb.kb_id)}
-                    className={`w-full px-3 py-2 text-sm rounded-lg transition-colors ${
-                      selectedKB === kb.kb_id
-                        ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                        : 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30'
-                    }`}
+                    onClick={() => {
+                      setSelectedKB(kb.kb_id)
+                      setShowUploadModal(true)
+                    }}
+                    className="w-full px-3 py-2 text-xs rounded-lg transition-colors bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30"
                   >
-                    ↑ Add Docs
+                    + Add docs
                   </button>
                 </div>
                 
@@ -805,31 +798,26 @@ export function DocumentUpload() {
         )}
       </div>
 
-      {/* Upload Area - Fixed at bottom (always visible if KBs exist) */}
-      {knowledgeBases.length > 0 && (
-        <div className="border-t border-slate-700/50 bg-slate-800/50 backdrop-blur-sm p-4 flex-shrink-0">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-3">
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg border border-slate-700/50 p-6 w-full max-w-2xl">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm font-medium text-white">
-                  {selectedKB ? (
-                    <>Uploading to: <span className="text-cyan-400">{knowledgeBases.find(k => k.kb_id === selectedKB)?.name}</span></>
-                  ) : (
-                    <>Uploading to: <span className="text-cyan-400">{knowledgeBases[0]?.name}</span> (default)</>
-                  )}
-                </p>
+                <h3 className="text-base font-semibold text-white">Upload documents</h3>
                 <p className="text-xs text-gray-400 mt-1">
-                  Drag & drop files here, or click to select
+                  Uploading to: <span className="text-cyan-400">{knowledgeBases.find(k => k.kb_id === selectedKB)?.name}</span>
                 </p>
               </div>
-              {selectedKB && (
-                <button
-                  onClick={() => setSelectedKB(null)}
-                  className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors text-gray-400 hover:text-white"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  setShowUploadModal(false)
+                  setSelectedKB(null)
+                }}
+                className="p-1 hover:bg-slate-700/50 rounded transition-colors text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
             
             <div
@@ -855,7 +843,7 @@ export function DocumentUpload() {
             
             {/* Upload Progress */}
             {uploadProgress.size > 0 && (
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 space-y-2 max-h-64 overflow-y-auto">
                 {Array.from(uploadProgress.entries()).map(([fileId, progress]) => (
                   <div key={fileId} className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
                     <div className="flex items-center justify-between mb-2">
@@ -867,9 +855,9 @@ export function DocumentUpload() {
                         ) : (
                           <XCircle className="text-red-400 flex-shrink-0" size={16} />
                         )}
-                        <span className="text-sm text-gray-300 truncate">{progress.fileName}</span>
+                        <span className="text-xs text-gray-300 truncate">{progress.fileName}</span>
                       </div>
-                      <span className="text-sm text-gray-400 ml-2">{progress.progress}%</span>
+                      <span className="text-xs text-gray-400 ml-2">{progress.progress}%</span>
                     </div>
                     <div className="w-full bg-slate-700/50 rounded-full h-1.5">
                       <div
@@ -899,8 +887,8 @@ export function DocumentUpload() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-slate-800 rounded-lg border border-slate-700/50 p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">
-                {editingKB ? 'Edit Knowledge Base' : 'New Knowledge Base'}
+              <h3 className="text-base font-semibold text-white">
+                {editingKB ? 'Edit knowledge base' : 'New knowledge base'}
               </h3>
               <button
                 onClick={() => {

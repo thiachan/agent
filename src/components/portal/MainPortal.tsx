@@ -147,10 +147,10 @@ export function MainPortal() {
           </div>
           <button
             onClick={createNewChat}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-400 hover:to-blue-500 transition-all font-medium shadow-lg shadow-cyan-500/30"
+            className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-400 hover:to-blue-500 transition-all font-medium shadow-lg shadow-cyan-500/30 text-sm"
           >
             <Plus className="w-4 h-4" />
-            <span>New Chat</span>
+            <span>New chat</span>
           </button>
         </div>
 
@@ -159,7 +159,7 @@ export function MainPortal() {
           <nav className="space-y-1">
             <button
               onClick={() => setActiveView('chat')}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
                 activeView === 'chat'
                   ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-white border border-cyan-400/30'
                   : 'text-gray-400 hover:bg-slate-700/50 hover:text-white'
@@ -171,14 +171,14 @@ export function MainPortal() {
             {user?.role === 'admin' && (
               <button
                 onClick={() => setActiveView('upload')}
-                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
                   activeView === 'upload'
                     ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-white border border-cyan-400/30'
                     : 'text-gray-400 hover:bg-slate-700/50 hover:text-white'
                 }`}
               >
                 <FileText className="w-5 h-5" />
-                <span>Knowledge Base</span>
+                <span>Knowledge base</span>
               </button>
             )}
           </nav>
@@ -186,12 +186,12 @@ export function MainPortal() {
 
         {/* Recent Chats - Scrollable */}
         <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            Recent Chats
+          <h2 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            Recent chats
           </h2>
           <div className="space-y-2">
             {recentChats.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">No recent chats</p>
+              <p className="text-xs text-gray-500 text-center py-4">No recent chats</p>
             ) : (
               recentChats.map((chat) => (
                 <div
@@ -208,8 +208,8 @@ export function MainPortal() {
                   >
                     <span className="text-base mt-0.5 flex-shrink-0">{getModelEmoji(chat.model_name)}</span>
                     <div className="flex-1 min-w-0 text-left">
-                      <p className="text-sm font-medium truncate text-left">{chat.title || 'New Chat'}</p>
-                      <p className="text-xs text-gray-500 mt-1 text-left">{formatDate(chat.updated_at)}</p>
+                      <p className="text-xs font-medium truncate text-left">{chat.title || 'New chat'}</p>
+                      <p className="text-[10px] text-gray-500 mt-1 text-left">{formatDate(chat.updated_at)}</p>
                     </div>
                     {selectedChatId === chat.id && (
                       <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 flex-shrink-0 mt-0.5" />
@@ -236,10 +236,10 @@ export function MainPortal() {
               {user?.full_name?.charAt(0) || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
+              <p className="text-xs font-medium text-white truncate">
                 {user?.full_name || 'User'}
               </p>
-              <p className="text-xs text-gray-400 truncate">
+              <p className="text-[10px] text-gray-400 truncate">
                 {user?.email || 'user@gsse.com'}
               </p>
             </div>
@@ -280,8 +280,8 @@ export function MainPortal() {
         {activeView === 'upload' && user?.role !== 'admin' && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <p className="text-lg font-medium text-white mb-2">Access Restricted</p>
-              <p className="text-gray-400">Document upload and management is only available to administrators.</p>
+              <p className="text-base font-medium text-white mb-2">Access restricted</p>
+              <p className="text-gray-400 text-xs">Document upload and management is only available to administrators</p>
             </div>
           </div>
         )}

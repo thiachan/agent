@@ -1,18 +1,20 @@
 import httpx
 import logging
-import os
+import base64
 from typing import Tuple, Optional, Dict, Any
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class PresentonService:
-    """Service for integrating with Presenton.ai PowerPoint generation API"""
+    """Service for integrating with Presenton PowerPoint generation API"""
     
     def __init__(self):
         self.api_key = settings.PRESENTON_API_KEY
         self.api_url = settings.PRESENTON_API_URL.rstrip('/')
         self.max_slides = settings.PRESENTON_MAX_SLIDES
+        self.require_auth = settings.PRESENTON_REQUIRE_AUTH
     
     async def generate_powerpoint(
         self,
@@ -21,34 +23,33 @@ class PresentonService:
         template_path: Optional[str] = None
     ) -> Tuple[Dict[str, Any], str]:
         """
-        Generate PowerPoint presentation using Presenton.ai API
+        Generate PowerPoint presentation using Presenton API
         
         Args:
             content: The content to generate slides from
             topic: Optional topic/title for the presentation
-            template_path: Path to the template PPTX file (not used for now, using "general" template)
+            template_path: Path to template PPTX file (not used)
         
         Returns:
-            Tuple of (response_dict with path, filename)
-            The response_dict contains: presentation_id, path (download URL), edit_path, credits_consumed
+            Tuple of (response_dict, filename)
         """
-        if not self.api_key:
-            raise ValueError("Presenton.ai API key not configured")
+        if self.require_auth and not self.api_key:
+            raise ValueError("Presenton API authentication required but API key not configured")
         
         try:
             logger.info("=" * 60)
-            logger.info("PRESENTON.AI SERVICE: Starting PowerPoint generation")
+            logger.info("PRESENTON SERVICE: Starting PowerPoint generation")
             logger.info(f"   API URL: {self.api_url}")
+            logger.info(f"   Auth Required: {self.require_auth}")
             logger.info(f"   Max slides: {self.max_slides}")
             logger.info("=" * 60)
             
-            # Prepare the request payload according to Presenton.ai API
+            # Prepare API request payload
             payload = {
                 "content": content,
-                "n_slides": 12,  # Fixed to 12 slides
+                "n_slides": 12,
                 "language": "English",
-                "template": "custom-31ec1f9f-6111-43d8-95db-217e051a021b",  # Using cisco custom template
-                "theme": "36dada46-7c64-47f2-aad8-4930660e3e7b",  # Using custom theme
+                "template": "custom-84bb7379-b8f2-47ce-b38d-2ac916ea31c3",
                 "export_as": "pptx",
                 "tone": "professional",
                 "verbosity": "standard",
@@ -57,35 +58,29 @@ class PresentonService:
                 "include_title_slide": True
             }
             
-            # Note: Template file upload not supported in current API, using "general" template
-            if template_path and os.path.exists(template_path):
-                logger.info(f"Template file found: {template_path}, but using 'general' template as per API")
-            
-            # Make the request to Presenton.ai API
+            # Build headers - conditionally include authentication
             endpoint = f"{self.api_url}/api/v1/ppt/presentation/generate"
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
+            headers = {"Content-Type": "application/json"}
+            
+            if self.require_auth:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+                logger.info("Using authenticated request (Bearer token)")
+            else:
+                logger.info("Using non-authenticated request (internal ECS service)")
             
             async with httpx.AsyncClient(timeout=300.0) as client:
-                logger.info(f"Calling Presenton.ai API: {endpoint}")
-                logger.info(f"Payload: {payload}")
+                logger.info(f"Calling Presenton API: {endpoint}")
                 
-                response = await client.post(
-                    endpoint,
-                    json=payload,
-                    headers=headers
-                )
+                # Generate presentation
+                response = await client.post(endpoint, json=payload, headers=headers)
                 response.raise_for_status()
                 
-                # Parse JSON response
                 result = response.json()
-                logger.info(f"Presenton.ai response: {result}")
+                logger.info(f"Presenton API response: {result}")
                 
-                # Extract download path
+                # Validate response
                 if "path" not in result:
-                    raise ValueError(f"Presenton.ai API did not return a download path. Response: {result}")
+                    raise ValueError(f"Presenton API did not return a download path. Response: {result}")
                 
                 download_path = result["path"]
                 presentation_id = result.get("presentation_id", "unknown")
@@ -96,25 +91,48 @@ class PresentonService:
                 logger.info(f"   Download path: {download_path}")
                 logger.info(f"   Credits consumed: {credits_consumed}")
                 
-                # Generate filename from topic or content
+                # Generate filename
                 filename = f"presentation_{topic or 'generated'}.pptx".replace(' ', '_')[:100]
                 
-                # Return the full response dict so frontend can use the path directly
-                return {
-                    "presentation_id": presentation_id,
-                    "path": download_path,
-                    "edit_path": result.get("edit_path"),
-                    "credits_consumed": credits_consumed,
-                    "filename": filename
-                }, filename
+                # Handle local file path (ECS) vs external URL (public API)
+                if download_path.startswith('/'):
+                    # Local path - download file from ECS service
+                    logger.info(f"Downloading file from ECS service: {download_path}")
+                    download_url = f"{self.api_url}{download_path}"
+                    
+                    download_response = await client.get(download_url)
+                    download_response.raise_for_status()
+                    
+                    file_data = download_response.content
+                    logger.info(f"✅ Downloaded {len(file_data)} bytes from ECS")
+                    
+                    # Return base64 encoded data
+                    base64_data = base64.b64encode(file_data).decode('utf-8')
+                    
+                    return {
+                        "presentation_id": presentation_id,
+                        "base64_data": base64_data,
+                        "credits_consumed": credits_consumed,
+                        "filename": filename,
+                        "source": "ecs_presenton"
+                    }, filename
+                else:
+                    # External URL - return path for direct download
+                    return {
+                        "presentation_id": presentation_id,
+                        "path": download_path,
+                        "edit_path": result.get("edit_path"),
+                        "credits_consumed": credits_consumed,
+                        "filename": filename
+                    }, filename
                 
         except httpx.HTTPStatusError as e:
-            logger.error(f"Presenton.ai API HTTP error: {e.response.status_code} - {e.response.text}")
-            raise ValueError(f"Presenton.ai API error: {e.response.status_code} - {e.response.text}")
+            logger.error(f"Presenton API HTTP error: {e.response.status_code} - {e.response.text}")
+            raise ValueError(f"Presenton API error: {e.response.status_code} - {e.response.text}")
         except Exception as e:
-            logger.error(f"Error calling Presenton.ai API: {e}", exc_info=True)
-            raise ValueError(f"Failed to generate PowerPoint using Presenton.ai: {str(e)}")
+            logger.error(f"Error calling Presenton API: {e}", exc_info=True)
+            raise ValueError(f"Failed to generate PowerPoint using Presenton API: {str(e)}")
+
 
 # Create singleton instance
 presenton_service = PresentonService()
-

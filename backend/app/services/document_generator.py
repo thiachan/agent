@@ -55,11 +55,15 @@ class DocumentGenerator:
             raise ValueError(f"Unsupported document type: {doc_type}")
     
     async def _generate_ppt(self, content: str, user_context: Dict[str, Any], session_id: Optional[int] = None, topic: Optional[str] = None, template_id: Optional[int] = None) -> Tuple[bytes, str, str]:
-        """Generate PowerPoint presentation using Presenton.ai API or fallback to local generation"""
-        # Try Presenton.ai API first if configured
-        if settings.PRESENTON_API_KEY:
+        """Generate PowerPoint presentation using Presenton API or fallback to local generation"""
+        # Try Presenton API first if configured:
+        # - If auth not required (internal ECS): just need URL
+        # - If auth required (public API): need URL and API key
+        presenton_enabled = (not settings.PRESENTON_REQUIRE_AUTH) or (settings.PRESENTON_REQUIRE_AUTH and settings.PRESENTON_API_KEY)
+        
+        if presenton_enabled:
             logger.info("=" * 60)
-            logger.info("POWERPOINT GENERATION: Attempting Presenton.ai API...")
+            logger.info("POWERPOINT GENERATION: Attempting Presenton API...")
             logger.info(f"Content length: {len(content)} chars, Topic: {topic}, Template ID: {template_id}")
             logger.info("=" * 60)
             
@@ -87,8 +91,8 @@ class DocumentGenerator:
                     except Exception as e:
                         logger.warning(f"Could not load template {template_id}: {e}", exc_info=True)
                 
-                # Use Presenton.ai API to generate PowerPoint
-                logger.info("🚀 Calling Presenton.ai API...")
+                # Use Presenton API to generate PowerPoint
+                logger.info("🚀 Calling Presenton API...")
                 presenton_result, filename = await presenton_service.generate_powerpoint(
                     content=content,
                     topic=topic,
@@ -96,20 +100,27 @@ class DocumentGenerator:
                 )
                 
                 logger.info("=" * 60)
-                logger.info(f"✅ SUCCESS: Presenton.ai generated PowerPoint")
-                logger.info(f"   Download path: {presenton_result.get('path')}")
+                logger.info(f"✅ SUCCESS: Presenton API generated PowerPoint")
+                logger.info(f"   Source: {presenton_result.get('source', 'unknown')}")
                 logger.info("=" * 60)
                 
-                # Return the path URL instead of bytes - frontend will download directly
-                # Store the result in a way that frontend can access the path
-                # We'll return a special format that the frontend can handle
-                import json
-                return json.dumps(presenton_result).encode('utf-8'), filename, "application/json"
+                # Check if we got base64 data (from ECS) or a URL (from public API)
+                if "base64_data" in presenton_result:
+                    # ECS service - return base64 data (like local generation)
+                    import base64
+                    import json
+                    ppt_bytes = base64.b64decode(presenton_result["base64_data"])
+                    logger.info(f"Returning {len(ppt_bytes)} bytes as PowerPoint file")
+                    return ppt_bytes, filename, "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                else:
+                    # Public API with URL - return JSON with path
+                    import json
+                    return json.dumps(presenton_result).encode('utf-8'), filename, "application/json"
                 
             except ImportError:
                 logger.warning("Presenton service not available, using local generation")
             except Exception as presenton_error:
-                logger.warning(f"Presenton.ai API failed: {presenton_error}, falling back to local generation", exc_info=True)
+                logger.warning(f"Presenton API failed: {presenton_error}, falling back to local generation", exc_info=True)
         
         # Fallback: Local generation using python-pptx
         return await self._generate_ppt_local(content, user_context, session_id, topic, template_id)

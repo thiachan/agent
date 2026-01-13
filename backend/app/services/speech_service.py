@@ -99,7 +99,7 @@ Now create a comprehensive, engaging speech that transforms this information int
     
     async def _invoke_llm(self, llm, prompt: str):
         """Invoke LLM with this service's max_tokens configuration"""
-        from langchain.schema import HumanMessage
+        from langchain_core.messages import HumanMessage
         from langchain_openai import AzureChatOpenAI
         
         messages = [HumanMessage(content=prompt)]
@@ -136,4 +136,6 @@ Now create a comprehensive, engaging speech that transforms this information int
 
 # Global instance - can be customized per service
 speech_service = SpeechService()
+
+
 

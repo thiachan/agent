@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks, Form, Request
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
@@ -129,15 +129,20 @@ async def upload_file(
     allowed_roles: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     # Restrict uploads to admin only
     from app.models.user import UserRole
+    import logging
+    logger = logging.getLogger(__name__)
+    
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Document upload is restricted to administrators only"
         )
+    
     # Validate file type
     file_type = get_file_type(file.filename)
     if not file_type:
@@ -146,8 +151,10 @@ async def upload_file(
             detail=f"Unsupported file type. Allowed: {', '.join(settings.ALLOWED_EXTENSIONS)}"
         )
     
-    # Check file size
+    # Check file size - read in chunks to avoid memory issues
     file_content = await file.read()
+    file_size = len(file_content)
+    logger.info(f"Received file: {file.filename}, size: {file_size} bytes ({file_size / 1024 / 1024:.2f}MB)")
     file_size = len(file_content)
     if file_size > settings.MAX_FILE_SIZE:
         raise HTTPException(

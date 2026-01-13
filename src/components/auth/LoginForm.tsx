@@ -100,19 +100,19 @@ export function LoginForm() {
     <div className="space-y-4">
       {showForgotPassword ? (
         <form onSubmit={handleForgotPassword} className="space-y-4">
-          <h2 className="text-xl font-semibold text-white mb-4">Reset Password</h2>
+          <h2 className="text-base font-semibold text-white mb-4">Reset password</h2>
           {error && (
-            <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded">
+            <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded text-xs">
               {error}
             </div>
           )}
           {successMessage && (
-            <div className="bg-green-500/20 border border-green-500/50 text-green-300 px-4 py-3 rounded">
+            <div className="bg-green-500/20 border border-green-500/50 text-green-300 px-4 py-3 rounded text-xs">
               {successMessage}
             </div>
           )}
           <div>
-            <label htmlFor="forgotEmail" className="block text-sm font-medium text-gray-300 mb-1">
+            <label htmlFor="forgotEmail" className="block text-xs font-medium text-gray-300 mb-1">
               Email
             </label>
             <input
@@ -121,16 +121,16 @@ export function LoginForm() {
               value={forgotPasswordEmail}
               onChange={(e) => setForgotPasswordEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
+              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
               placeholder="you@company.com"
             />
           </div>
           <button
             type="submit"
             disabled={forgotPasswordLoading}
-            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2 px-4 rounded-md hover:from-cyan-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg shadow-cyan-500/30"
+            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2 px-4 rounded-md hover:from-cyan-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg shadow-cyan-500/30 text-sm"
           >
-            {forgotPasswordLoading ? 'Sending...' : 'Send Reset Link'}
+            {forgotPasswordLoading ? 'Sending...' : 'Send reset link'}
           </button>
           <button
             type="button"
@@ -139,27 +139,27 @@ export function LoginForm() {
               setError('')
               setSuccessMessage('')
             }}
-            className="w-full text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+            className="w-full text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
           >
-            Back to Login
+            Back to login
           </button>
         </form>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded">
+            <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded text-xs">
               {error}
             </div>
           )}
           {successMessage && (
-            <div className="bg-green-500/20 border border-green-500/50 text-green-300 px-4 py-3 rounded">
+            <div className="bg-green-500/20 border border-green-500/50 text-green-300 px-4 py-3 rounded text-xs">
               {successMessage}
             </div>
           )}
       {isSignUp && (
         <div>
-          <label htmlFor="fullName" className="block text-sm font-medium text-gray-300 mb-1">
-            Full Name
+          <label htmlFor="fullName" className="block text-xs font-medium text-gray-300 mb-1">
+            Full name
           </label>
           <input
             id="fullName"
@@ -167,13 +167,13 @@ export function LoginForm() {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             required
-            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
-            placeholder="John Doe"
+            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
+            placeholder="John doe"
           />
         </div>
       )}
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1">
+        <label htmlFor="email" className="block text-xs font-medium text-gray-300 mb-1">
           Email
         </label>
         <input
@@ -182,12 +182,12 @@ export function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
+          className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
           placeholder="you@company.com"
         />
       </div>
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1">
+        <label htmlFor="password" className="block text-xs font-medium text-gray-300 mb-1">
           Password
         </label>
         <input
@@ -196,39 +196,17 @@ export function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
+          className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
           placeholder="••••••••"
         />
       </div>
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2 px-4 rounded-md hover:from-cyan-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg shadow-cyan-500/30"
+        className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2 px-4 rounded-md hover:from-cyan-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg shadow-cyan-500/30 text-sm"
       >
-        {loading ? (isSignUp ? 'Signing up...' : 'Logging in...') : (isSignUp ? 'Sign Up' : 'Sign In')}
+        {loading ? (isSignUp ? 'Signing up...' : 'Logging in...') : (isSignUp ? 'Sign up' : 'Sign in')}
       </button>
-          {!isSignUp && (
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={handleResendVerification}
-                className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors mr-4"
-              >
-                Resend Verification Email
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForgotPassword(true)
-                  setError('')
-                  setSuccessMessage('')
-                }}
-                className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-              >
-                Forgot Password?
-              </button>
-            </div>
-          )}
           <div className="text-center">
             <button
               type="button"
@@ -237,9 +215,9 @@ export function LoginForm() {
                 setError('')
                 setSuccessMessage('')
               }}
-              className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+              className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
             >
-              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+              {isSignUp ? "Already have an account? sign in" : "Don't have an account? sign up"}
             </button>
           </div>
         </form>

@@ -40,17 +40,17 @@ class ModelManager:
             try:
                 # Get OAuth2 access token using client credentials flow
                 token_url = "https://id.cisco.com/oauth2/default/v1/token"
-                credentials = base64.b64encode(
-                    f"{settings.CISCO_CLIENT_ID}:{settings.CISCO_CLIENT_SECRET}".encode()
-                ).decode()
                 
                 response = httpx.post(
                     token_url,
                     headers={
-                        "Authorization": f"Basic {credentials}",
                         "Content-Type": "application/x-www-form-urlencoded"
                     },
-                    data={"grant_type": "client_credentials"},
+                    data={
+                        "grant_type": "client_credentials",
+                        "client_id": settings.CISCO_CLIENT_ID,
+                        "client_secret": settings.CISCO_CLIENT_SECRET
+                    },
                     timeout=10.0
                 )
                 

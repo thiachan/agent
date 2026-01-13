@@ -4,6 +4,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export const api = axios.create({
   baseURL: API_URL,
+  maxContentLength: 500 * 1024 * 1024, // 500MB
+  maxBodyLength: 500 * 1024 * 1024,    // 500MB
+  timeout: 600000, // 10 minutes for large uploads
 })
 
 // Add auth token to requests and handle Content-Type

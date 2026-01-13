@@ -6,9 +6,9 @@ os.environ["CHROMA_CLIENT_TELEMETRY"] = "False"
 os.environ["CHROMA_TELEMETRY"] = "False"
 
 from typing import List, Dict, Optional
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from app.core.config import settings
 from app.services.model_manager import model_manager
 
@@ -192,7 +192,7 @@ class RAGService:
                                         chunk_data = collection.get(ids=[chunk_id])
                                         if chunk_data and "documents" in chunk_data and chunk_data["documents"]:
                                             # Create a document-like object
-                                            from langchain.schema import Document
+                                            from langchain_core.documents import Document
                                             doc = Document(
                                                 page_content=chunk_data["documents"][0],
                                                 metadata=metadata
@@ -638,7 +638,7 @@ IMPORTANT: Before answering, check if the question contains pronouns or referenc
             # Check model type and invoke appropriately
             if isinstance(llm, AzureChatOpenAI):
                 # AzureChatOpenAI (Cisco) - use messages format
-                from langchain.schema import HumanMessage
+                from langchain_core.messages import HumanMessage
                 messages = [HumanMessage(content=formatted_prompt)]
                 logger.info(f"Invoking AzureChatOpenAI (Cisco) with {len(messages)} message(s)")
                 try:
@@ -743,7 +743,7 @@ IMPORTANT: Before answering, check if the question contains pronouns or referenc
                         raise
             elif isinstance(llm, ChatBedrock):
                 # ChatBedrock - use messages format
-                from langchain.schema import HumanMessage
+                from langchain_core.messages import HumanMessage
                 import time
                 messages = [HumanMessage(content=formatted_prompt)]
                 logger.info(f"Invoking ChatBedrock with {len(messages)} message(s)")
@@ -811,7 +811,7 @@ IMPORTANT: Before answering, check if the question contains pronouns or referenc
                         raise
             elif isinstance(llm, ChatOpenAI):
                 # Regular ChatOpenAI - use messages format
-                from langchain.schema import HumanMessage
+                from langchain_core.messages import HumanMessage
                 messages = [HumanMessage(content=formatted_prompt)]
                 logger.info(f"Invoking ChatOpenAI with {len(messages)} message(s)")
                 response = llm.invoke(messages)
