@@ -58,12 +58,62 @@ An enterprise-grade AI-powered platform that enables employees to interact with 
   - OpenAI API key (for embeddings and TTS)
   - Presenton.ai API key (optional, for PowerPoint generation)
 
-## 🔧 Installation
+## 🔧 Installation & Onboarding
+
+### ⚡ Quick Start (5 minutes)
+
+**Development:**
+```bash
+git clone https://github.com/thiachan/agent.git
+cd agent
+
+# Setup backend
+cd backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt && python init_db.py
+# Setup frontend (new terminal)
+cd .. && npm install && npm run dev
+# Access: Frontend (http://localhost:3000) | API Docs (http://localhost:8000/docs)
+```
+
+**Production (AWS EC2):**
+```bash
+ssh ubuntu@<EC2_IP>
+chmod +x setup-ubuntu.sh && ./setup-ubuntu.sh
+git clone https://github.com/thiachan/agent.git && cd agent
+# Configure: nano backend/.env
+cd backend && python init_db.py && cd ..
+npm run build && ./start-services.sh
+```
+
+### 📋 Complete Onboarding Guide
+
+**→ See [ONBOARDING_COMPLETE.md](ONBOARDING_COMPLETE.md) for:**
+- Full 6-phase setup process with detailed instructions
+- Environment configuration guide  
+- Backend initialization and verification
+- Frontend build and deployment
+- Production Nginx configuration
+- Troubleshooting common issues
+- Pre/During/Post deployment checklists
+- Complete verification steps
+
+### ✅ Validate Deployment
+
+```bash
+# Run deployment validator (checks all components)
+python3 validate-deployment.py
+
+# Or use bash version
+bash validate-deployment.sh
+```
+
+---
+
+## 🔧 Detailed Installation
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository-url>
-cd AGENT
+git clone https://github.com/thiachan/agent.git
+cd agent
 ```
 
 ### 2. Frontend Setup
@@ -73,34 +123,7 @@ cd AGENT
 npm install
 
 # Create environment file
-cp .env.example .env.local
-```
-
-Edit `.env.local`:
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-### 3. Backend Setup
-
-```bash
-cd backend
-
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On Windows:
-venv\Scripts\activate
-# On Linux/Mac:
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create environment file
-cp .env.example .env
-```
+nano .env.local
 
 Edit `backend/.env`:
 ```env
@@ -453,6 +476,7 @@ The platform uses RAG to provide context-aware responses:
 - Check file size (max 100MB)
 - Ensure file type is allowed
 - Check backend logs for errors
+- For production deployments, verify Nginx `client_max_body_size` is set to at least 100M
 
 **PowerPoint Generation Fails**
 - Verify Presenton.ai API key is set
@@ -548,6 +572,12 @@ For issues, questions, or contributions, please contact the development team - t
 
 ## 📋 Recent Updates
 
+- ✅ **VSCode Optimized v1** - Button capitalization improvements (Speech (MP3), Podcast (MP3), PowerPoint, PDF Document)
+- ✅ Fixed duplicate speech/podcast button display in UI
+- ✅ Large file upload support - Frontend and backend configured for 100MB+ uploads
+- ✅ Nginx reverse proxy configured with proper client_max_body_size and proxy buffering
+- ✅ Axios HTTP client updated with 500MB request limit and 10-minute timeout for large uploads
+- ✅ Starlette multipart middleware for proper handling of large form data
 - ✅ Comprehensive technical documentation added (`TECHNICAL_DOCUMENTATION.md`)
 - ✅ Password reset functionality - secure password reset via email (1-hour token expiration)
 - ✅ Demo video search with precise matching, suggestions, and YouTube integration
@@ -560,4 +590,3 @@ For issues, questions, or contributions, please contact the development team - t
 - ✅ Documentation organized in `docs/` folder with deployment guides
 - ✅ GSSO rebranding (GSSE/HRSP → GSSO) across entire system
 - ✅ Independent podcast and speech services with isolated configurations
-- ✅ Fixed duplicate generation buttons in chat interface
