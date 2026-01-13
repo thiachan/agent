@@ -66,23 +66,41 @@ An enterprise-grade AI-powered platform that enables employees to interact with 
 ```bash
 git clone https://github.com/thiachan/agent.git
 cd agent
+git checkout vscode-optimized-v1  # ⭐ Latest stable version
 
 # Setup backend
-cd backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt && python init_db.py
+cd backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+nano .env  # Copy template from ONBOARDING_COMPLETE.md Environment Configuration section
+python init_db.py
+
 # Setup frontend (new terminal)
-cd .. && npm install && npm run dev
+cd .. && npm install && nano .env.local
+# Add: NEXT_PUBLIC_API_URL=http://localhost:8000
+npm run dev
+
 # Access: Frontend (http://localhost:3000) | API Docs (http://localhost:8000/docs)
+# Default login: thiachan@pseudo-ai.com / password123
 ```
 
 **Production (AWS EC2):**
 ```bash
 ssh ubuntu@<EC2_IP>
 chmod +x setup-ubuntu.sh && ./setup-ubuntu.sh
+
 git clone https://github.com/thiachan/agent.git && cd agent
-# Configure: nano backend/.env
+git checkout vscode-optimized-v1  # ⭐ Latest stable version
+
+nano backend/.env  # Copy template from ONBOARDING_COMPLETE.md
 cd backend && python init_db.py && cd ..
 npm run build && ./start-services.sh
+
+# See ONBOARDING_COMPLETE.md for Nginx configuration
 ```
+
+**⭐ Important:**
+- Always checkout `vscode-optimized-v1` for latest stable version
+- No `.env.example` exists - copy template from [ONBOARDING_COMPLETE.md](ONBOARDING_COMPLETE.md)
+- Change default password before production
 
 ### 📋 Complete Onboarding Guide
 
@@ -114,6 +132,7 @@ bash validate-deployment.sh
 ```bash
 git clone https://github.com/thiachan/agent.git
 cd agent
+git checkout vscode-optimized-v1  # ⭐ Latest stable version with all improvements
 ```
 
 ### 2. Frontend Setup
@@ -124,10 +143,30 @@ npm install
 
 # Create environment file
 nano .env.local
+# Add: NEXT_PUBLIC_API_URL=http://localhost:8000
+```
 
-Edit `backend/.env`:
-```env
-# Database
+### 3. Backend Setup
+
+```bash
+cd backend
+
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On Linux/Mac:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create environment configuration file
+nano .env
+# Copy the template from the Environment Configuration section below
+```
 DATABASE_URL=sqlite:///./intranet.db
 
 # Cisco OpenAI (Required for chat)
