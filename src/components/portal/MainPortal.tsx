@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { useAuthStore } from '@/stores/authStore'
-import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star } from 'lucide-react'
+import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star, Users } from 'lucide-react'
 import { ChatWithGeneration } from './ChatWithGeneration'
 import { DocumentUpload } from './DocumentUpload'
+import { UserManagement } from './UserManagement'
 import api from '@/lib/api'
 
 interface ChatSession {
@@ -18,7 +19,7 @@ interface ChatSession {
 }
 
 export function MainPortal() {
-  const [activeView, setActiveView] = useState<'chat' | 'upload'>('chat')
+  const [activeView, setActiveView] = useState<'chat' | 'upload' | 'users'>('chat')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [recentChats, setRecentChats] = useState<ChatSession[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
@@ -28,9 +29,9 @@ export function MainPortal() {
     fetchRecentChats()
   }, [])
 
-  // Redirect non-admin users away from upload view
+  // Redirect non-admin users away from upload and users view
   useEffect(() => {
-    if (activeView === 'upload' && user?.role !== 'admin') {
+    if ((activeView === 'upload' || activeView === 'users') && user?.role !== 'admin') {
       setActiveView('chat')
     }
   }, [activeView, user?.role])
@@ -169,17 +170,30 @@ export function MainPortal() {
               <span>Chat</span>
             </button>
             {user?.role === 'admin' && (
-              <button
-                onClick={() => setActiveView('upload')}
-                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
-                  activeView === 'upload'
-                    ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-white border border-cyan-400/30'
-                    : 'text-gray-400 hover:bg-slate-700/50 hover:text-white'
-                }`}
-              >
-                <FileText className="w-5 h-5" />
-                <span>Knowledge base</span>
-              </button>
+              <>
+                <button
+                  onClick={() => setActiveView('upload')}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
+                    activeView === 'upload'
+                      ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-white border border-cyan-400/30'
+                      : 'text-gray-400 hover:bg-slate-700/50 hover:text-white'
+                  }`}
+                >
+                  <FileText className="w-5 h-5" />
+                  <span>Knowledge base</span>
+                </button>
+                <button
+                  onClick={() => setActiveView('users')}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
+                    activeView === 'users'
+                      ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-white border border-cyan-400/30'
+                      : 'text-gray-400 hover:bg-slate-700/50 hover:text-white'
+                  }`}
+                >
+                  <Users className="w-5 h-5" />
+                  <span>User Management</span>
+                </button>
+              </>
             )}
           </nav>
         </div>
@@ -282,6 +296,15 @@ export function MainPortal() {
             <div className="text-center">
               <p className="text-base font-medium text-white mb-2">Access restricted</p>
               <p className="text-gray-400 text-xs">Document upload and management is only available to administrators</p>
+            </div>
+          </div>
+        )}
+        {activeView === 'users' && user?.role === 'admin' && <UserManagement />}
+        {activeView === 'users' && user?.role !== 'admin' && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <p className="text-base font-medium text-white mb-2">Access restricted</p>
+              <p className="text-gray-400 text-xs">User management is only available to administrators</p>
             </div>
           </div>
         )}

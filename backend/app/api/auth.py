@@ -290,3 +290,70 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
         "message": "Password reset successfully. You can now log in with your new password."
     }
 
+@router.get("/users")
+async def list_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    List all users - Admin only
+    """
+    # Check if user is admin
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can view user list"
+        )
+    
+    users = db.query(User).all()
+    
+    return {
+        "users": [
+            {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "role": user.role.value,
+                "is_active": user.is_active,
+                "is_verified": user.is_verified,
+                "created_at": user.created_at.isoformat() if user.created_at else None
+            }
+            for user in users
+        ]
+    }
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a user - Admin only
+    Prevents admin from deleting themselves
+    """
+    # Check if user is admin
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can delete users"
+        )
+    
+    # Prevent admin from deleting themselves
+    if current_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own account"
+        )
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db.delete(user)
+    db.commit()
+    
+    return {
+        "message": f"User {user.email} has been deleted successfully"
+    }
