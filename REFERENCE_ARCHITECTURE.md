@@ -11,39 +11,39 @@
 ```mermaid
 graph TB
     subgraph Client["Client Layer"]
-        UI["Next.js UI<br/>React Components<br/>Tailwind CSS"]
-        Mobile["Mobile Responsive<br/>PWA Support"]
+        UI["Next.js UI\nReact Components\nTailwind CSS"]
+        Mobile["Mobile Responsive\nPWA Support"]
     end
     
     subgraph API["API Gateway & Auth"]
-        Gateway["FastAPI Gateway<br/>OAuth2/JWT"]
-        Auth["Authentication<br/>Role-Based Access"]
+        Gateway["FastAPI Gateway\nOAuth2/JWT"]
+        Auth["Authentication\nRole-Based Access"]
     end
     
     subgraph Core["Core Services Layer"]
-        ChatSvc["Chat Service<br/>RAG Pipeline"]
-        DocSvc["Document Service<br/>File Processing"]
-        KbSvc["Knowledge Base<br/>Management"]
-        GenSvc["Generation Service<br/>PowerPoint/PDF/Audio"]
+        ChatSvc["Chat Service\nRAG Pipeline"]
+        DocSvc["Document Service\nFile Processing"]
+        KbSvc["Knowledge Base\nManagement"]
+        GenSvc["Generation Service\nPowerPoint/PDF/Audio"]
     end
     
     subgraph Data["Data & Search Layer"]
-        VectorDB["Vector Database<br/>ChromaDB"]
-        SQLite["SQL Database<br/>SQLite/PostgreSQL"]
-        FileStore["File Storage<br/>Local/S3"]
+        VectorDB["Vector Database\nChromaDB"]
+        SQLite["SQL Database\nSQLite/PostgreSQL"]
+        FileStore["File Storage\nLocal/S3"]
     end
     
     subgraph External["External Services"]
-        GPT["Cisco GPT-4.1<br/>Chat Models"]
-        OAI["OpenAI<br/>Embeddings & TTS"]
-        Presenton["Presenton.ai<br/>Slide Generation"]
-        HeyGen["HeyGen<br/>Video Generation"]
+        GPT["Cisco GPT-4.1\nChat Models"]
+        OAI["OpenAI\nEmbeddings & TTS"]
+        Presenton["Presenton.ai\nSlide Generation"]
+        HeyGen["HeyGen\nVideo Generation"]
     end
     
     subgraph MCP["MCP Agents"]
-        DemoAgent["Demo Video<br/>Search Agent"]
-        DocGenAgent["Document<br/>Generation Agent"]
-        CustomAgent["Custom Task<br/>Agents"]
+        DemoAgent["Demo Video\nSearch Agent"]
+        DocGenAgent["Document\nGeneration Agent"]
+        CustomAgent["Custom Task\nAgents"]
     end
     
     UI --> Gateway
@@ -86,18 +86,18 @@ graph TB
 ```mermaid
 graph LR
     subgraph UI["Frontend - Next.js 14"]
-        Auth["Auth Pages<br/>Login/Register<br/>Password Reset"]
-        Dashboard["Dashboard<br/>Knowledge Bases<br/>Document Management"]
-        Portal["Portal<br/>Chat Interface<br/>Results Display"]
-        Components["Shared Components<br/>Inputs<br/>Modals<br/>Layout"]
+        Auth["Auth Pages\nLogin/Register\nPassword Reset"]
+        Dashboard["Dashboard\nKnowledge Bases\nDocument Management"]
+        Portal["Portal\nChat Interface\nResults Display"]
+        Components["Shared Components\nInputs\nModals\nLayout"]
     end
     
     subgraph State["State Management"]
-        Zustand["Zustand Stores<br/>Auth State<br/>UI State<br/>Data State"]
+        Zustand["Zustand Stores\nAuth State\nUI State\nData State"]
     end
     
     subgraph HTTP["HTTP Client"]
-        Axios["Axios Interceptors<br/>Error Handling<br/>Request Logging"]
+        Axios["Axios Interceptors\nError Handling\nRequest Logging"]
     end
     
     UI --> State
@@ -122,15 +122,15 @@ graph LR
 ```mermaid
 graph TB
     subgraph Gateway["FastAPI Gateway"]
-        Router["Route Handlers<br/>Request Validation<br/>Response Formatting"]
-        JWT["JWT Token<br/>Generation & Validation"]
-        CORS["CORS Policy<br/>Security Headers"]
+        Router["Route Handlers\nRequest Validation\nResponse Formatting"]
+        JWT["JWT Token\nGeneration & Validation"]
+        CORS["CORS Policy\nSecurity Headers"]
     end
     
     subgraph Auth["Authentication"]
-        OAuth2["OAuth2 Flow<br/>Cisco Credentials"]
-        RBAC["Role-Based<br/>Access Control"]
-        Sessions["Session<br/>Management"]
+        OAuth2["OAuth2 Flow\nCisco Credentials"]
+        RBAC["Role-Based\nAccess Control"]
+        Sessions["Session\nManagement"]
     end
     
     subgraph Middleware["Middleware Stack"]
@@ -187,30 +187,30 @@ GET    /agents/status           - MCP Agent status
 ```mermaid
 graph TB
     subgraph ChatService["Chat Service"]
-        RAGPipeline["RAG Pipeline<br/>Query Processing"]
-        PromptMgmt["Prompt<br/>Management"]
-        LLMCall["LLM Calls<br/>Cisco GPT-4.1"]
-        ContextMgmt["Context<br/>Management"]
+        RAGPipeline["RAG Pipeline\nQuery Processing"]
+        PromptMgmt["Prompt\nManagement"]
+        LLMCall["LLM Calls\nCisco GPT-4.1"]
+        ContextMgmt["Context\nManagement"]
     end
     
     subgraph DocService["Document Service"]
-        Parser["Document Parser<br/>PDF, DOCX, PPT<br/>XLS, Video, Audio"]
-        Chunker["Text Chunker<br/>Sliding Window<br/>Semantic Chunks"]
-        Embedder["Embedding<br/>Generation<br/>OpenAI"]
-        MetaExtract["Metadata<br/>Extraction"]
+        Parser["Document Parser\nPDF, DOCX, PPT\nXLS, Video, Audio"]
+        Chunker["Text Chunker\nSliding Window\nSemantic Chunks"]
+        Embedder["Embedding\nGeneration\nOpenAI"]
+        MetaExtract["Metadata\nExtraction"]
     end
     
     subgraph KBService["Knowledge Base Service"]
-        KBMgmt["KB Management<br/>CRUD Operations"]
-        OrgLogic["Organization<br/>Logic"]
-        AccessCtrl["Access Control<br/>Permission Check"]
+        KBMgmt["KB Management\nCRUD Operations"]
+        OrgLogic["Organization\nLogic"]
+        AccessCtrl["Access Control\nPermission Check"]
     end
     
     subgraph GenService["Generation Service"]
-        PPTGen["PowerPoint<br/>Generator<br/>Presenton.ai"]
-        AudioGen["Audio<br/>Generator<br/>OpenAI TTS"]
-        DocGen["Document<br/>Generator<br/>DOCX/PDF"]
-        VideoGen["Video<br/>Generator<br/>HeyGen"]
+        PPTGen["PowerPoint\nGenerator\nPresenton.ai"]
+        AudioGen["Audio\nGenerator\nOpenAI TTS"]
+        DocGen["Document\nGenerator\nDOCX/PDF"]
+        VideoGen["Video\nGenerator\nHeyGen"]
     end
     
     ChatService --> RAGPipeline
@@ -261,24 +261,24 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph SQL["SQL Database<br/>SQLite/PostgreSQL"]
-        Users["Users Table<br/>Credentials<br/>Roles<br/>Preferences"]
-        Documents["Documents Table<br/>Metadata<br/>File References<br/>Processing Status"]
-        KnowledgeBases["Knowledge Bases<br/>Organization<br/>Settings<br/>Permissions"]
-        ChatSessions["Chat Sessions<br/>History<br/>Context<br/>Metadata"]
-        AccessControl["Access Control<br/>Roles<br/>Permissions<br/>Audit Log"]
+    subgraph SQL["SQL Database\nSQLite/PostgreSQL"]
+        Users["Users Table\nCredentials\nRoles\nPreferences"]
+        Documents["Documents Table\nMetadata\nFile References\nProcessing Status"]
+        KnowledgeBases["Knowledge Bases\nOrganization\nSettings\nPermissions"]
+        ChatSessions["Chat Sessions\nHistory\nContext\nMetadata"]
+        AccessControl["Access Control\nRoles\nPermissions\nAudit Log"]
     end
     
-    subgraph Vector["Vector Database<br/>ChromaDB"]
-        Collections["Collections<br/>Per Knowledge Base"]
-        Embeddings["Document Embeddings<br/>Text Chunks<br/>Metadata"]
-        Indices["Vector Indices<br/>Fast Retrieval<br/>Similarity Search"]
+    subgraph Vector["Vector Database\nChromaDB"]
+        Collections["Collections\nPer Knowledge Base"]
+        Embeddings["Document Embeddings\nText Chunks\nMetadata"]
+        Indices["Vector Indices\nFast Retrieval\nSimilarity Search"]
     end
     
     subgraph FileStore["File Storage"]
-        Uploads["User Uploads<br/>Original Files"]
-        Generated["Generated Files<br/>PPT, PDF, Audio"]
-        Cached["Cached Data<br/>Embeddings<br/>Processed Files"]
+        Uploads["User Uploads\nOriginal Files"]
+        Generated["Generated Files\nPPT, PDF, Audio"]
+        Cached["Cached Data\nEmbeddings\nProcessed Files"]
     end
     
     SQL --> Users
@@ -357,20 +357,20 @@ erDiagram
 ```mermaid
 graph TB
     subgraph MCPCore["Model Context Protocol Core"]
-        ResourceServer["Resource Server<br/>Exposes Resources<br/>Tools & Prompts"]
-        Transport["Transport Layer<br/>JSON-RPC 2.0<br/>Stdio/HTTP"]
+        ResourceServer["Resource Server\nExposes Resources\nTools & Prompts"]
+        Transport["Transport Layer\nJSON-RPC 2.0\nStdio/HTTP"]
     end
     
     subgraph Agents["Specialized Agents"]
-        DemoVideoAgent["Demo Video<br/>Search Agent<br/>Semantic Matching<br/>Ranking"]
-        DocGenAgent["Document<br/>Generation Agent<br/>Template Selection<br/>Content Synthesis"]
-        CustomTaskAgent["Custom Task<br/>Agent<br/>Business Logic<br/>Automation"]
+        DemoVideoAgent["Demo Video\nSearch Agent\nSemantic Matching\nRanking"]
+        DocGenAgent["Document\nGeneration Agent\nTemplate Selection\nContent Synthesis"]
+        CustomTaskAgent["Custom Task\nAgent\nBusiness Logic\nAutomation"]
     end
     
     subgraph Tools["Available Tools"]
-        VectorSearch["Vector Search<br/>ChromaDB"]
-        FileOps["File Operations<br/>Read/Write"]
-        APICall["External API<br/>Calls"]
+        VectorSearch["Vector Search\nChromaDB"]
+        FileOps["File Operations\nRead/Write"]
+        APICall["External API\nCalls"]
     end
     
     MCPCore --> ResourceServer
@@ -397,21 +397,21 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend as Frontend<br/>React
-    participant API as FastAPI<br/>Gateway
-    participant Chat as Chat<br/>Service
-    participant VectorDB as Vector<br/>Database
-    participant LLM as Cisco<br/>GPT-4.1
-    participant DB as SQL<br/>Database
+    participant Frontend as Frontend\nReact
+    participant API as FastAPI\nGateway
+    participant Chat as Chat\nService
+    participant VectorDB as Vector\nDatabase
+    participant LLM as Cisco\nGPT-4.1
+    participant DB as SQL\nDatabase
     
     User->>Frontend: Type query
     Frontend->>API: POST /chat/message
     API->>Chat: Process message
-    Chat->>VectorDB: Retrieve context<br/>(semantic search)
+    Chat->>VectorDB: Retrieve context\n(semantic search)
     VectorDB-->>Chat: Top-k results
-    Chat->>LLM: Generate response<br/>with context
+    Chat->>LLM: Generate response\nwith context
     LLM-->>Chat: Response text
-    Chat->>DB: Save message<br/>& response
+    Chat->>DB: Save message\n& response
     DB-->>Chat: Saved
     Chat-->>API: Response
     API-->>Frontend: Display response
@@ -423,13 +423,13 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend as Frontend<br/>React
-    participant API as FastAPI<br/>Gateway
-    participant DocSvc as Document<br/>Service
-    participant Parser as Parser<br/>Module
-    participant Embedder as Embedder<br/>OpenAI
-    participant VectorDB as Vector<br/>Database
-    participant DB as SQL<br/>Database
+    participant Frontend as Frontend\nReact
+    participant API as FastAPI\nGateway
+    participant DocSvc as Document\nService
+    participant Parser as Parser\nModule
+    participant Embedder as Embedder\nOpenAI
+    participant VectorDB as Vector\nDatabase
+    participant DB as SQL\nDatabase
     
     User->>Frontend: Upload file
     Frontend->>API: POST /documents/upload
@@ -439,9 +439,9 @@ sequenceDiagram
     DocSvc->>DocSvc: Chunk text
     DocSvc->>Embedder: Generate embeddings
     Embedder-->>DocSvc: Embedding vectors
-    DocSvc->>VectorDB: Store chunks<br/>& embeddings
+    DocSvc->>VectorDB: Store chunks\n& embeddings
     VectorDB-->>DocSvc: Stored
-    DocSvc->>DB: Save document<br/>metadata
+    DocSvc->>DB: Save document\nmetadata
     DB-->>DocSvc: Saved
     DocSvc-->>API: Status: Complete
     API-->>Frontend: Upload success
@@ -453,15 +453,15 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend as Frontend<br/>React
-    participant API as FastAPI<br/>Gateway
-    participant GenSvc as Generation<br/>Service
-    participant LLM as LLM<br/>Services
-    participant External as External<br/>APIs
-    participant JobTracker as Job<br/>Tracker
-    participant FileStore as File<br/>Storage
+    participant Frontend as Frontend\nReact
+    participant API as FastAPI\nGateway
+    participant GenSvc as Generation\nService
+    participant LLM as LLM\nServices
+    participant External as External\nAPIs
+    participant JobTracker as Job\nTracker
+    participant FileStore as File\nStorage
     
-    User->>Frontend: Request generation<br/>(PPT/PDF/Audio)
+    User->>Frontend: Request generation\n(PPT/PDF/Audio)
     Frontend->>API: POST /generate/{type}
     API->>GenSvc: Create generation job
     GenSvc->>JobTracker: Queue job
@@ -472,7 +472,7 @@ sequenceDiagram
     par Background Processing
         GenSvc->>LLM: Generate content
         LLM-->>GenSvc: Content
-        GenSvc->>External: Call service<br/>(Presenton/TTS/HeyGen)
+        GenSvc->>External: Call service\n(Presenton/TTS/HeyGen)
         External-->>GenSvc: Generated file
         GenSvc->>FileStore: Save file
         FileStore-->>GenSvc: File path
@@ -489,10 +489,10 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend as Frontend<br/>Next.js
-    participant API as FastAPI<br/>Gateway
-    participant Auth as Auth<br/>Service
-    participant DB as SQL<br/>Database
+    participant Frontend as Frontend\nNext.js
+    participant API as FastAPI\nGateway
+    participant Auth as Auth\nService
+    participant DB as SQL\nDatabase
     
     User->>Frontend: Enter credentials
     Frontend->>API: POST /auth/login
@@ -504,7 +504,7 @@ sequenceDiagram
         Auth->>Auth: Generate JWT
         Auth-->>API: Token + User info
         API-->>Frontend: Token + User data
-        Frontend->>Frontend: Store token<br/>in memory/localStorage
+        Frontend->>Frontend: Store token\nin memory/localStorage
     Else Credentials Invalid
         Auth-->>API: Auth failed
         API-->>Frontend: Error
@@ -568,10 +568,10 @@ sequenceDiagram
 ```mermaid
 graph TB
     subgraph Local["Local Machine"]
-        Frontend["Next.js Dev Server<br/>Port 3000<br/>Hot Reload"]
-        Backend["FastAPI Dev Server<br/>Port 8000<br/>Auto Reload"]
-        DB["SQLite<br/>Local File"]
-        Vector["ChromaDB<br/>Local Vector DB"]
+        Frontend["Next.js Dev Server\nPort 3000\nHot Reload"]
+        Backend["FastAPI Dev Server\nPort 8000\nAuto Reload"]
+        DB["SQLite\nLocal File"]
+        Vector["ChromaDB\nLocal Vector DB"]
     end
     
     Frontend -->|API calls| Backend
@@ -585,25 +585,25 @@ graph TB
 graph TB
     subgraph AWS["AWS Cloud"]
         subgraph ALB["Application Load Balancer"]
-            LB["Load Balancer<br/>HTTPS<br/>SSL/TLS"]
+            LB["Load Balancer\nHTTPS\nSSL/TLS"]
         end
         
         subgraph FrontendCluster["Frontend - EC2 Auto Scaling"]
-            FE1["Next.js Instance 1<br/>Port 3000"]
-            FE2["Next.js Instance 2<br/>Port 3000"]
-            FE3["Next.js Instance 3<br/>Port 3000"]
+            FE1["Next.js Instance 1\nPort 3000"]
+            FE2["Next.js Instance 2\nPort 3000"]
+            FE3["Next.js Instance 3\nPort 3000"]
         end
         
         subgraph BackendCluster["Backend - EC2 Auto Scaling"]
-            BE1["FastAPI Instance 1<br/>Port 8000"]
-            BE2["FastAPI Instance 2<br/>Port 8000"]
-            BE3["FastAPI Instance 3<br/>Port 8000"]
+            BE1["FastAPI Instance 1\nPort 8000"]
+            BE2["FastAPI Instance 2\nPort 8000"]
+            BE3["FastAPI Instance 3\nPort 8000"]
         end
         
         subgraph Data["Data Layer"]
-            RDS["AWS RDS<br/>PostgreSQL"]
-            VectorDB["ChromaDB<br/>Vector Store"]
-            S3["AWS S3<br/>File Storage"]
+            RDS["AWS RDS\nPostgreSQL"]
+            VectorDB["ChromaDB\nVector Store"]
+            S3["AWS S3\nFile Storage"]
         end
     end
     
@@ -639,11 +639,11 @@ graph TB
 ```mermaid
 graph TB
     subgraph Security["Security Layers"]
-        Network["Network Security<br/>VPC<br/>Security Groups<br/>WAF"]
-        Transport["Transport Security<br/>HTTPS/TLS<br/>Certificate Management"]
-        Auth["Authentication<br/>OAuth2<br/>JWT Tokens<br/>Session Management"]
-        Authz["Authorization<br/>RBAC<br/>Permission Checks<br/>Audit Logging"]
-        DataSec["Data Security<br/>Encryption at Rest<br/>Encryption in Transit<br/>Access Controls"]
+        Network["Network Security\nVPC\nSecurity Groups\nWAF"]
+        Transport["Transport Security\nHTTPS/TLS\nCertificate Management"]
+        Auth["Authentication\nOAuth2\nJWT Tokens\nSession Management"]
+        Authz["Authorization\nRBAC\nPermission Checks\nAudit Logging"]
+        DataSec["Data Security\nEncryption at Rest\nEncryption in Transit\nAccess Controls"]
     end
     
     Network --> Transport
@@ -668,15 +668,15 @@ graph TB
 
 ```mermaid
 graph LR
-    Backend["Backend<br/>FastAPI"]
+    Backend["Backend\nFastAPI"]
     
-    Backend -->|OAuth2| Cisco["Cisco OAuth2<br/>Token Exchange"]
-    Backend -->|API Key| OpenAI["OpenAI API<br/>Embeddings/TTS"]
-    Backend -->|API Key| Presenton["Presenton.ai<br/>PowerPoint Gen"]
-    Backend -->|API Key| HeyGen["HeyGen API<br/>Video Gen"]
-    Backend -->|Webhooks| Notifications["Notification<br/>Services"]
+    Backend -->|OAuth2| Cisco["Cisco OAuth2\nToken Exchange"]
+    Backend -->|API Key| OpenAI["OpenAI API\nEmbeddings/TTS"]
+    Backend -->|API Key| Presenton["Presenton.ai\nPowerPoint Gen"]
+    Backend -->|API Key| HeyGen["HeyGen API\nVideo Gen"]
+    Backend -->|Webhooks| Notifications["Notification\nServices"]
     
-    Cisco -->|Access Token| CiscoGPT["Cisco GPT-4.1<br/>Chat Completions"]
+    Cisco -->|Access Token| CiscoGPT["Cisco GPT-4.1\nChat Completions"]
 ```
 
 ---
@@ -709,10 +709,10 @@ Database Scaling:
 ```mermaid
 graph TB
     subgraph Cache["Caching Layers"]
-        Browser["Browser Cache<br/>Static assets<br/>API responses"]
-        CDN["CDN Cache<br/>Frontend assets<br/>Global distribution"]
-        App["Application Cache<br/>Redis/In-memory<br/>Query results"]
-        DB["Database Query Cache<br/>Prepared statements<br/>Connection pooling"]
+        Browser["Browser Cache\nStatic assets\nAPI responses"]
+        CDN["CDN Cache\nFrontend assets\nGlobal distribution"]
+        App["Application Cache\nRedis/In-memory\nQuery results"]
+        DB["Database Query Cache\nPrepared statements\nConnection pooling"]
     end
 ```
 
@@ -834,13 +834,13 @@ graph TD
 ```mermaid
 graph LR
     subgraph Normal["Normal Operation"]
-        Primary["Primary Region<br/>All Services"]
+        Primary["Primary Region\nAll Services"]
     end
     
     subgraph Backup["Backup/DR"]
-        Standby["Standby Region<br/>Ready to Activate"]
-        DBBackup["Database Backups<br/>Daily snapshots"]
-        FileBackup["File Backups<br/>S3 replication"]
+        Standby["Standby Region\nReady to Activate"]
+        DBBackup["Database Backups\nDaily snapshots"]
+        FileBackup["File Backups\nS3 replication"]
     end
     
     Primary -->|Daily Backup| DBBackup
@@ -859,13 +859,13 @@ graph LR
 
 ```mermaid
 graph TB
-    Current["Current State<br/>MVP Functionality"]
+    Current["Current State\nMVP Functionality"]
     
-    Phase1["Phase 1: Enhancements<br/>- Advanced Analytics<br/>- Batch Processing<br/>- Webhook Support"]
+    Phase1["Phase 1: Enhancements\n- Advanced Analytics\n- Batch Processing\n- Webhook Support"]
     
-    Phase2["Phase 2: Scaling<br/>- Multi-tenant Support<br/>- Global Distribution<br/>- Advanced Caching"]
+    Phase2["Phase 2: Scaling\n- Multi-tenant Support\n- Global Distribution\n- Advanced Caching"]
     
-    Phase3["Phase 3: AI Enhancements<br/>- Custom Fine-tuned Models<br/>- Advanced RAG<br/>- Reasoning Engines"]
+    Phase3["Phase 3: AI Enhancements\n- Custom Fine-tuned Models\n- Advanced RAG\n- Reasoning Engines"]
     
     Current --> Phase1
     Phase1 --> Phase2
