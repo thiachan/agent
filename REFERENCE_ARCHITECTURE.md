@@ -299,54 +299,54 @@ erDiagram
     CHAT_SESSIONS ||--o{ MESSAGES : contains
     
     USERS {
-        id PK
-        email UK
-        hashed_password
-        role
-        is_active
-        created_at
+        int id
+        string email
+        string hashed_password
+        string role
+        bool is_active
+        datetime created_at
     }
     
     KNOWLEDGE_BASES {
-        id PK
-        owner_id FK
-        name
-        description
-        created_at
+        int id
+        int owner_id
+        string name
+        string description
+        datetime created_at
     }
     
     DOCUMENTS {
-        id PK
-        kb_id FK
-        filename
-        file_path
-        file_type
-        status
-        uploaded_at
+        int id
+        int kb_id
+        string filename
+        string file_path
+        string file_type
+        string status
+        datetime uploaded_at
     }
     
     DOCUMENT_CHUNKS {
-        id PK
-        document_id FK
-        content
-        embedding_id
-        metadata
+        int id
+        int document_id
+        text content
+        int embedding_id
+        string metadata
     }
     
     CHAT_SESSIONS {
-        id PK
-        user_id FK
-        kb_id FK
-        title
+        int id
+        int user_id
+        int kb_id
+        string title
         created_at
     }
     
     MESSAGES {
-        id PK
-        session_id FK
-        role
-        content
-        timestamp
+        int id
+        int session_id
+        string role
+        text content
+        datetime timestamp
     }
 ```
 
