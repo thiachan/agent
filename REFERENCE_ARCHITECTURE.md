@@ -338,7 +338,7 @@ erDiagram
         int user_id
         int kb_id
         string title
-        created_at
+        datetime created_at
     }
     
     MESSAGES {
