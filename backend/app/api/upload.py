@@ -66,6 +66,19 @@ def process_document_background(document_id: int, file_path: str, file_type: str
                 else:
                     tags = content_tags
         
+        # Detect content_type and category from filename/content
+        import re as re_mod
+        content_type_label = ""
+        category = ""
+        fn_lower = document.filename.lower()
+        if "demo-video" in fn_lower or "demo_video" in fn_lower:
+            content_type_label = "demo_video"
+        
+        # Extract category from title line (text before |)
+        first_line = text.split('\n')[0].strip() if text else ""
+        if '|' in first_line:
+            category = first_line.split('|')[0].strip()
+        
         # Extract title from document if available
         title = document.title
         if not title:
@@ -88,6 +101,8 @@ def process_document_background(document_id: int, file_path: str, file_type: str
             "filename": document.filename,
             "title": title,  # Include title in metadata
             "tags": tags,  # Include tags in metadata
+            "category": category,  # Product category (e.g., "DC Edge", "Cloud Edge")
+            "content_type": content_type_label,  # e.g., "demo_video"
             "file_type": file_type,
             "is_public": document.is_public,
             "allowed_roles": document.allowed_roles or "",

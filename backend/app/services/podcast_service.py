@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class PodcastServiceConfig:
     """Independent configuration for Podcast Service"""
     # LLM Configuration
-    TEMPERATURE: float = 0.9  # Higher temperature for more natural, varied dialogue
+    TEMPERATURE: float = 0.4  # Balanced temperature for natural dialogue with factual accuracy
     MAX_TOKENS: int = 12000  # More tokens for longer podcast dialogues
     MODEL_ID: str = "auto"
     
@@ -90,7 +90,9 @@ CRITICAL INSTRUCTIONS:
 
 5. **MAKE IT ENGAGING**: Use varied language, enthusiasm, questions, and natural conversational elements. Make it sound like a real podcast conversation.
 
-6. **FORMAT**: Use this exact format:
+6. **ACCURACY CONSTRAINT**: Only discuss facts, data, and claims that are explicitly present in the provided content. Do NOT invent statistics, fabricate quotes, or add information not found in the source material. The conversation should feel natural but every factual claim must come from the source content.
+
+7. **FORMAT**: Use this exact format:
    Host: [dialogue]
    Guest: [dialogue]
    Host: [dialogue]

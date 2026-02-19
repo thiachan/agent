@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class SpeechServiceConfig:
     """Independent configuration for Speech Service"""
     # LLM Configuration
-    TEMPERATURE: float = 0.7  # Moderate temperature for clear, focused speech
+    TEMPERATURE: float = 0.3  # Low temperature for factual, focused speech with minimal hallucination
     MAX_TOKENS: int = 8000  # Sufficient for speeches
     MODEL_ID: str = "auto"
     
@@ -89,6 +89,8 @@ CRITICAL INSTRUCTIONS:
 4. **MAKE IT ENGAGING**: Use varied language, rhetorical devices, and enthusiasm. Make it sound like a professional speaker addressing an audience.
 
 5. **BE THOROUGH**: Cover ALL major topics and details from the content. Don't skip important information.
+
+6. **ACCURACY CONSTRAINT**: Only use facts, data, and claims that are explicitly present in the provided content. Do NOT invent statistics, fabricate quotes, or add information not found in the source material. If the content lacks detail on a subtopic, acknowledge that briefly rather than making something up.
 
 **TOPIC:** {topic or 'the subject matter'}
 

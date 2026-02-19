@@ -85,8 +85,15 @@ class RAGService:
         
         try:
             logger.info(f"Splitting text into chunks for document {metadata.get('document_id')}")
-            texts = self.text_splitter.split_text(text)
-            logger.info(f"Split into {len(texts)} chunks")
+            
+            # Keep small documents as a single chunk to preserve context integrity
+            # (e.g., demo video docs where tags + URL + description should stay together)
+            if len(text.strip()) <= 1500:
+                texts = [text.strip()] if text.strip() else [" "]
+                logger.info(f"Small document ({len(text.strip())} chars) - keeping as single chunk")
+            else:
+                texts = self.text_splitter.split_text(text)
+                logger.info(f"Split into {len(texts)} chunks")
             
             if not texts:
                 logger.warning("No text chunks created, using empty text")

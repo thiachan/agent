@@ -1029,8 +1029,7 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
                 </div>
               )}
 
-              {/* Video Generation Button - DISABLED: Only demo videos are available */}
-              {/* Removed: Video generation via HeyGen is disabled in production */}
+              {/* Video Generation Button - Only demo videos are available */}
 
               {/* PowerPoint Generation Confirmation */}
               {message.role === 'assistant' && message.metadata?.ppt_generation && (

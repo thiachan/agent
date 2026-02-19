@@ -43,7 +43,7 @@ async def generate_document(
 ):
     """Generate a document (PPT, MP4, DOC, PDF, MP3, WAV, Speech, Podcast) from chat content"""
     
-    # For MP4 video requests, only check for demo videos (HeyGen generation disabled)
+    # For MP4 video requests, only check for demo videos
     if request.type == "mp4":
         try:
             # Check for existing demo videos

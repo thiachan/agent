@@ -47,11 +47,6 @@ class MCPService:
                 "description": "Search for demo videos by keywords and return YouTube links",
                 "endpoint": None,
             },
-            "video_generate": {
-                "name": "Generate Video",
-                "description": "Generate video using HeyGen API from script content",
-                "endpoint": None,
-            },
         }
     
     def register_agent(self, agent_id: str, config: Dict):
@@ -311,67 +306,6 @@ class MCPService:
                     "message": f"Failed to search for demo videos: {str(e)}",
                     "videos": []
                 }
-        elif agent_id == "video_generate":
-            # HeyGen video generation is disabled in production
-            # Code kept for reference but not used
-            # from app.services.heygen_service import heygen_service
-            import logging
-            logger = logging.getLogger(__name__)
-            
-            logger.info("HeyGen video generation is disabled - only demo videos are available")
-            return {
-                "status": "error",
-                "message": "Video generation is not available. Please check for existing demo videos instead."
-            }
-            
-            # DISABLED CODE BELOW - Kept for reference
-            # script = params.get("script") or params.get("content") or params.get("text", "")
-            # topic = params.get("topic") or params.get("title", "")
-            # image_key = params.get("image_key")
-            # voice_id = params.get("voice_id")
-            # video_orientation = params.get("video_orientation")
-            # fit = params.get("fit")
-            # custom_motion_prompt = params.get("custom_motion_prompt")
-            # enhance_custom_motion_prompt = params.get("enhance_custom_motion_prompt", False)
-            # audio_url = params.get("audio_url")
-            # audio_asset_id = params.get("audio_asset_id")
-            # 
-            # if not script:
-            #     return {
-            #         "status": "error",
-            #         "message": "No script content provided for video generation"
-            #     }
-            # 
-            # try:
-            #     logger.info(f"Generating video with HeyGen Avatar IV: topic={topic}, script_length={len(script)}")
-            #     result = await heygen_service.generate_video(
-            #         script=script,
-            #         topic=topic,
-            #         image_key=image_key,
-            #         voice_id=voice_id,
-            #         video_orientation=video_orientation,
-            #         fit=fit,
-            #         custom_motion_prompt=custom_motion_prompt,
-            #         enhance_custom_motion_prompt=enhance_custom_motion_prompt,
-            #         audio_url=audio_url,
-            #         audio_asset_id=audio_asset_id
-            #     )
-            #     
-            #     return {
-            #         "status": "success",
-            #         "video_id": result.get("video_id"),
-            #         "video_url": result.get("video_url"),
-            #         "filename": result.get("filename"),
-            #         "credits_consumed": result.get("credits_consumed", 0),
-            #         "estimated_duration": result.get("estimated_duration", 0),
-            #         "message": f"Video generated successfully! Credits used: {result.get('credits_consumed', 0)}"
-            #     }
-            # except Exception as e:
-            #     logger.error(f"HeyGen video generation error: {e}", exc_info=True)
-            #     return {
-            #         "status": "error",
-            #         "message": f"Failed to generate video: {str(e)}"
-            #     }
         else:
             return {
                 "status": "pending",

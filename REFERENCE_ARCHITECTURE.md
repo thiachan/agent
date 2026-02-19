@@ -37,7 +37,6 @@ graph TB
         GPT["Cisco GPT-4.1\nChat Models"]
         OAI["OpenAI\nEmbeddings & TTS"]
         Presenton["Presenton.ai\nSlide Generation"]
-        HeyGen["HeyGen\nVideo Generation"]
     end
     
     subgraph MCP["MCP Agents"]
@@ -67,7 +66,6 @@ graph TB
     
     GenSvc --> Presenton
     GenSvc --> OAI
-    GenSvc --> HeyGen
     GenSvc --> FileStore
     
     GPT --> MCP
@@ -210,7 +208,6 @@ graph TB
         PPTGen["PowerPoint\nGenerator\nPresenton.ai"]
         AudioGen["Audio\nGenerator\nOpenAI TTS"]
         DocGen["Document\nGenerator\nDOCX/PDF"]
-        VideoGen["Video\nGenerator\nHeyGen"]
     end
     
     ChatService --> RAGPipeline
@@ -226,7 +223,6 @@ graph TB
     GenService --> PPTGen
     GenService --> AudioGen
     GenService --> DocGen
-    GenService --> VideoGen
 ```
 
 **Service Details:**
@@ -253,7 +249,6 @@ graph TB
 - PowerPoint generation via Presenton.ai
 - Text-to-Speech via OpenAI TTS API
 - Document export (Word, PDF)
-- Video synthesis via HeyGen
 
 ---
 
@@ -472,7 +467,7 @@ sequenceDiagram
     par Background Processing
         GenSvc->>LLM: Generate content
         LLM-->>GenSvc: Content
-        GenSvc->>External: Call service\n(Presenton/TTS/HeyGen)
+        GenSvc->>External: Call service\n(Presenton/TTS)
         External-->>GenSvc: Generated file
         GenSvc->>FileStore: Save file
         FileStore-->>GenSvc: File path
@@ -557,7 +552,6 @@ sequenceDiagram
 | Cisco GPT-4.1 | Chat completions, embeddings | OAuth2 |
 | OpenAI | Embeddings (text-embedding-3-small), TTS | API Key |
 | Presenton.ai | PowerPoint generation | API Key |
-| HeyGen | Video synthesis | API Key |
 
 ---
 
@@ -673,7 +667,6 @@ graph LR
     Backend -->|OAuth2| Cisco["Cisco OAuth2\nToken Exchange"]
     Backend -->|API Key| OpenAI["OpenAI API\nEmbeddings/TTS"]
     Backend -->|API Key| Presenton["Presenton.ai\nPowerPoint Gen"]
-    Backend -->|API Key| HeyGen["HeyGen API\nVideo Gen"]
     Backend -->|Webhooks| Notifications["Notification\nServices"]
     
     Cisco -->|Access Token| CiscoGPT["Cisco GPT-4.1\nChat Completions"]
