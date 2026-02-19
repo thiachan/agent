@@ -195,19 +195,28 @@ async def generate_document_async(
                 threading.Thread(target=update_podcast_status, daemon=True).start()
                 
             elif request.type == 'speech':
-                job_tracker.update_job(job.job_id, progress=15, message="Generating speech script...")
+                job_tracker.update_job(job.job_id, progress=10, message="Generating speech script...")
                 
                 def update_speech_status():
                     logger.info(f"[StatusThread] Started for speech job {job.job_id}")
-                    time.sleep(6)
+                    time.sleep(8)
                     if job_tracker.get_job(job.job_id) and job_tracker.get_job(job.job_id).status == JobStatus.PROCESSING:
-                        job_tracker.update_job(job.job_id, progress=30, message="Script ready! Creating audio...")
+                        job_tracker.update_job(job.job_id, progress=25, message="Script ready! Creating audio...")
                     time.sleep(10)
                     if job_tracker.get_job(job.job_id) and job_tracker.get_job(job.job_id).status == JobStatus.PROCESSING:
-                        job_tracker.update_job(job.job_id, progress=60, message="Generating audio with TTS (takes ~20-30 sec)...")
-                    time.sleep(10)
+                        job_tracker.update_job(job.job_id, progress=40, message="Generating audio with TTS...")
+                    time.sleep(15)
                     if job_tracker.get_job(job.job_id) and job_tracker.get_job(job.job_id).status == JobStatus.PROCESSING:
-                        job_tracker.update_job(job.job_id, progress=90, message="Finalizing audio...")
+                        job_tracker.update_job(job.job_id, progress=60, message="Still generating audio (large content takes longer)...")
+                    time.sleep(15)
+                    if job_tracker.get_job(job.job_id) and job_tracker.get_job(job.job_id).status == JobStatus.PROCESSING:
+                        job_tracker.update_job(job.job_id, progress=75, message="Processing audio segments...")
+                    time.sleep(15)
+                    if job_tracker.get_job(job.job_id) and job_tracker.get_job(job.job_id).status == JobStatus.PROCESSING:
+                        job_tracker.update_job(job.job_id, progress=85, message="Finalizing audio...")
+                    time.sleep(15)
+                    if job_tracker.get_job(job.job_id) and job_tracker.get_job(job.job_id).status == JobStatus.PROCESSING:
+                        job_tracker.update_job(job.job_id, progress=90, message="Almost done...")
                     logger.info(f"[StatusThread] Finished for speech job {job.job_id}")
                 
                 threading.Thread(target=update_speech_status, daemon=True).start()

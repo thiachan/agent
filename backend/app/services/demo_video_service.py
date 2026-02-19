@@ -296,6 +296,52 @@ class DemoVideoService:
         name = ' '.join(name.split())
         return name if name and len(name) > 3 else None
     
+    # Domain-generic terms that appear in almost every video document.
+    # These should never be the SOLE matching term — they only count when
+    # paired with a more specific term (e.g., "ai security" is fine,
+    # but "security" alone would match everything).
+    _DOMAIN_STOPWORDS = {
+        'security', 'network', 'cisco', 'demo', 'video',
+        'firewall', 'threat', 'policy', 'defense', 'detection',
+    }
+
+    # Compound words that users type as one word but are stored as
+    # separate words in tags/titles. Expanded before matching.
+    _COMPOUND_EXPANSIONS = {
+        'microsegmentation': 'micro segmentation',
+        'macrosegmentation': 'macro segmentation',
+        'zerotrust': 'zero trust',
+        'zeroday': 'zero day',
+    }
+
+    @staticmethod
+    def _term_in_text(term: str, text: str) -> bool:
+        """
+        Check if *term* appears in *text* with word-boundary awareness.
+
+        - Short terms (≤3 chars, e.g. "ai", "dc", "l4", "eve") are matched
+          only at word boundaries so that "ai" does NOT match inside
+          "segmentation" or "containment".
+        - Longer terms use plain substring matching, which still allows
+          compound-word hits like "snortml" inside "snortml zero day".
+        """
+        if not term or not text:
+            return False
+        if len(term) <= 3:
+            # Word-boundary match (handles punctuation / slashes too)
+            return bool(re.search(r'(?:^|[\s/\-_|,;()])' + re.escape(term) + r'(?:$|[\s/\-_|,;()])', text))
+        return term in text
+
+    @staticmethod
+    def _phrase_in_text(phrase: str, text: str) -> bool:
+        """
+        Check if *phrase* appears in *text* with word-boundary awareness.
+        Prevents tag 'segmentation' from matching query 'microsegmentation'.
+        """
+        if not phrase or not text:
+            return False
+        return bool(re.search(r'(?:^|[\s/\-_|,;()])' + re.escape(phrase) + r'(?:$|[\s/\-_|,;()])', text))
+
     def _matches_query_precisely(self, query: str, content: str, filename: str, metadata: Dict) -> bool:
         """
         Precise matching based on actual document structure for 100% accuracy:
@@ -303,21 +349,34 @@ class DemoVideoService:
         2. Check product name from title line
         3. Check filename (normalized)
         4. Check metadata tags
+        
+        Key design rules:
+        - Include 2-char terms (e.g. "ai", "dc") — they carry meaning
+        - For multi-term queries, require terms to CO-OCCUR in the same
+          tag / product name / filename rather than scattering across
+          unrelated tags
+        - Domain stopwords ("security", "protection", …) are ignored
+          when they are the only remaining term
         """
         query_lower = query.lower().strip()
-        # Extract meaningful terms (length > 2, or single character if it's the whole query)
-        query_terms = [term for term in query_lower.split() if len(term) > 2]
+
+        # Expand known compound words (e.g. "microsegmentation" → "micro segmentation")
+        for compound, expanded in self._COMPOUND_EXPANSIONS.items():
+            query_lower = re.sub(r'\b' + re.escape(compound) + r'\b', expanded, query_lower)
+
+        # Include terms with length >= 2 (so "ai", "dc", "l4" are kept)
+        query_terms = [term for term in query_lower.split() if len(term) >= 2]
         
-        # If no terms found (e.g., "eve" is 3 chars, but if query is "eve" it should be included)
-        # OR if query is a single word (even if short), include it
         if not query_terms:
-            # Single word or very short query - use the whole query as a term
             query_terms = [query_lower] if query_lower else []
         
-        # Also handle case where query is a single short word that was filtered out
-        # (e.g., "eve" would be included since len > 2, but "ai" would not)
-        if not query_terms and len(query_lower) >= 2:
-            query_terms = [query_lower]
+        # If every remaining term is a domain stopword the query is too
+        # generic to match precisely (e.g. user just typed "security").
+        # In that case, fall through to suggestions instead.
+        specific_terms = [t for t in query_terms if t not in self._DOMAIN_STOPWORDS]
+        if not specific_terms and len(query_terms) > 0:
+            logger.info(f"  ⚠️ All query terms are domain-generic: {query_terms} — skipping precise match")
+            return False
         
         # Extract tags - PRIORITIZE metadata tags (more reliable, stored per document)
         # Content tags might not be in every RAG chunk, but metadata tags are always available
@@ -372,122 +431,114 @@ class DemoVideoService:
             if query_lower == acronym or query_lower in variations:
                 # Check if any variation appears in tags, product, or filename
                 for variation in variations:
-                    if any(variation in tag for tag in all_tags):
+                    if any(self._term_in_text(variation, tag) for tag in all_tags):
                         logger.info(f"  ✅ Query '{query_lower}' matches known acronym '{acronym}' via tag variation '{variation}'")
                         return True
-                    if product_lower and variation in product_lower:
+                    if product_lower and self._term_in_text(variation, product_lower):
                         logger.info(f"  ✅ Query '{query_lower}' matches known acronym '{acronym}' via product name")
                         return True
-                    if variation in filename_lower:
+                    if self._term_in_text(variation, filename_lower):
                         logger.info(f"  ✅ Query '{query_lower}' matches known acronym '{acronym}' via filename")
                         return True
         
         # PRIORITY 1: Check if query matches product name exactly (most specific)
         if product_lower:
-            # Exact match or query is substring of product
-            if query_lower == product_lower or query_lower in product_lower or product_lower in query_lower:
+            # Exact match or full phrase is substring of product
+            if query_lower == product_lower or self._phrase_in_text(query_lower, product_lower):
                 logger.info(f"  ✅ Matches product name: '{product_name}'")
                 return True
+            # Product is substring of query only if product is specific enough
+            if self._phrase_in_text(product_lower, query_lower) and (len(product_lower.split()) > 1 or product_lower not in self._DOMAIN_STOPWORDS):
+                logger.info(f"  ✅ Product name in query: '{product_name}'")
+                return True
             
-            # For single word queries, check if it appears as a word in product name
+            # For single specific-term queries, check if it appears as a word in product name
             if len(query_terms) == 1:
                 term = query_terms[0]
-                product_words = product_lower.split()
-                # Check if term is a word in product name (e.g., "eve" in "dc edge eve encrypted")
-                if term in product_words:
-                    logger.info(f"  ✅ Single term '{term}' found as word in product name: '{product_name}'")
-                    return True
-                # Check if term is substring of any word (e.g., "eve" in "eve" or "encrypted")
-                if any(term in word for word in product_words):
-                    logger.info(f"  ✅ Single term '{term}' found in product name words: '{product_name}'")
-                    return True
+                if term not in self._DOMAIN_STOPWORDS:
+                    if self._term_in_text(term, product_lower):
+                        logger.info(f"  ✅ Single term '{term}' found in product name: '{product_name}'")
+                        return True
             
-            # Check if all query terms are in product name
-            if all(term in product_lower for term in query_terms):
+            # Check if all query terms co-occur in product name
+            if len(query_terms) > 1 and all(self._term_in_text(t, product_lower) for t in query_terms):
                 logger.info(f"  ✅ All query terms in product name: '{product_name}'")
                 return True
         
         # PRIORITY 2: Check tags (very reliable - explicitly defined in documents)
         if all_tags:
-            # Check if query matches any tag exactly (case-insensitive)
+            # --- Full-phrase checks first (most reliable) ---
             for tag in all_tags:
                 # Exact match
                 if query_lower == tag:
                     logger.info(f"  ✅ Matches tag exactly: '{tag}'")
                     return True
-                # Query is substring of tag (e.g., "eve" in "eve, encrypted visibility engine")
-                if query_lower in tag:
+                # Full query phrase is substring of tag (word-boundary)
+                if self._phrase_in_text(query_lower, tag):
                     logger.info(f"  ✅ Query found in tag: '{tag}'")
                     return True
-                # Tag is substring of query (e.g., "aiops" tag in "aiops scc" query)
-                if tag in query_lower:
-                    logger.info(f"  ✅ Tag found in query: '{tag}'")
-                    return True
+                # Tag is substring of query (word-boundary) — only if tag is specific
+                if self._phrase_in_text(tag, query_lower):
+                    tag_words_set = set(tag.split())
+                    if len(tag_words_set) > 1 or not tag_words_set.issubset(self._DOMAIN_STOPWORDS):
+                        logger.info(f"  ✅ Specific tag found in query: '{tag}'")
+                        return True
             
-            # Check if all query terms appear in tags
+            # --- Per-term checks ---
             if len(query_terms) == 1:
-                # Single term query - check if term appears in any tag
                 term = query_terms[0]
+                # Single stopword-only term already returned False above
                 for tag in all_tags:
-                    # Check if term is in tag (e.g., "eve" in "eve, encrypted visibility")
-                    if term in tag:
+                    if self._term_in_text(term, tag):
                         logger.info(f"  ✅ Single term '{term}' found in tag: '{tag}'")
                         return True
-                    # Check if tag word matches term (e.g., tag "eve" matches query "eve")
-                    tag_words = tag.split()
-                    if term in tag_words or any(term in word for word in tag_words):
-                        logger.info(f"  ✅ Single term '{term}' matches tag word: '{tag}'")
-                        return True
             else:
-                # Multiple terms - check if all terms are covered by tags
-                matching_tags = []
-                for term in query_terms:
-                    for tag in all_tags:
-                        if term in tag:
-                            matching_tags.append(tag)
-                            break
+                # Multiple terms — require ALL terms to co-occur in the SAME tag
+                for tag in all_tags:
+                    if all(self._term_in_text(t, tag) for t in query_terms):
+                        logger.info(f"  ✅ All query terms co-occur in tag: '{tag}'")
+                        return True
                 
-                if len(matching_tags) >= len(query_terms):
-                    logger.info(f"  ✅ All query terms match tags: {matching_tags[:3]}")
-                    return True
+                # Fallback: all SPECIFIC (non-stopword) terms match the same tag
+                if specific_terms and len(specific_terms) < len(query_terms):
+                    for tag in all_tags:
+                        if all(self._term_in_text(t, tag) for t in specific_terms):
+                            logger.info(f"  ✅ All specific terms {specific_terms} co-occur in tag: '{tag}'")
+                            return True
         
         # PRIORITY 3: Check filename (normalized - remove underscores, dashes)
         if query_terms:
-            # Normalize filename: replace underscores and dashes with spaces, then split
             filename_normalized = filename_lower.replace('_', ' ').replace('-', ' ')
-            filename_words = set(filename_normalized.split())
             
-            # For single term queries, check if term is in filename
             if len(query_terms) == 1:
                 term = query_terms[0]
-                # Check if term is a word in filename (e.g., "eve" in "dc edge eve encrypted")
-                if term in filename_words:
-                    logger.info(f"  ✅ Single term '{term}' found as word in filename")
-                    return True
-                # Check if term is substring of any filename word (e.g., "eve" in "eve" or "encrypted")
-                if any(term in word for word in filename_words):
-                    logger.info(f"  ✅ Single term '{term}' found in filename words")
-                    return True
-                # Check if term appears anywhere in filename string
-                if term in filename_normalized:
-                    logger.info(f"  ✅ Single term '{term}' found in filename string")
+                if self._term_in_text(term, filename_normalized):
+                    logger.info(f"  ✅ Single term '{term}' found in filename")
                     return True
             else:
-                # Multiple terms - require ALL terms to match
-                matching_terms = sum(1 for term in query_terms if any(term in word for word in filename_words) or term in filename_normalized)
+                matching_terms = sum(1 for term in query_terms if self._term_in_text(term, filename_normalized))
                 if matching_terms == len(query_terms):
                     logger.info(f"  ✅ All query terms match filename")
                     return True
+                if specific_terms and len(specific_terms) < len(query_terms):
+                    matching_specific = sum(1 for term in specific_terms if self._term_in_text(term, filename_normalized))
+                    if matching_specific == len(specific_terms):
+                        logger.info(f"  ✅ All specific terms match filename")
+                        return True
         
         # PRIORITY 4: Check title
         if query_terms and title_lower:
-            title_words = set(title_lower.split())
             if len(query_terms) == 1:
-                if query_terms[0] in title_words or any(query_terms[0] in word for word in title_words):
-                    logger.info(f"  ✅ Single term matches title")
-                    return True
+                term = query_terms[0]
+                if term not in self._DOMAIN_STOPWORDS:
+                    if self._term_in_text(term, title_lower):
+                        logger.info(f"  ✅ Single term matches title")
+                        return True
             else:
-                matching_terms = sum(1 for term in query_terms if any(term in word for word in title_words))
+                if self._phrase_in_text(query_lower, title_lower):
+                    logger.info(f"  ✅ Full query phrase matches title")
+                    return True
+                matching_terms = sum(1 for t in query_terms if self._term_in_text(t, title_lower))
                 if matching_terms == len(query_terms):
                     logger.info(f"  ✅ All query terms match title")
                     return True
@@ -509,10 +560,18 @@ class DemoVideoService:
         Returns score 0.0-1.0 (higher = more relevant)
         """
         query_lower = query.lower().strip()
-        query_terms = [term for term in query_lower.split() if len(term) > 2]
+
+        # Expand known compound words
+        for compound, expanded in self._COMPOUND_EXPANSIONS.items():
+            query_lower = re.sub(r'\b' + re.escape(compound) + r'\b', expanded, query_lower)
+
+        query_terms = [term for term in query_lower.split() if len(term) >= 2]
         
         if not query_terms:
             query_terms = [query_lower]
+        
+        # Identify which terms are specific (non-stopword)
+        specific_terms = [t for t in query_terms if t not in self._DOMAIN_STOPWORDS]
         
         score = 0.0
         
@@ -542,22 +601,30 @@ class DemoVideoService:
         # Check partial matches (weighted scoring)
         
         # Tag matches (high weight - 40%)
+        # For multi-term queries, measure co-occurrence in same tag (stronger signal)
         if all_tags:
-            matching_terms = 0
-            for term in query_terms:
-                # Check if term appears in any tag
-                if any(term in tag or tag in term or term in tag.split() for tag in all_tags):
-                    matching_terms += 1
-            
-            if matching_terms > 0:
-                tag_ratio = matching_terms / len(query_terms)
-                tag_score = tag_ratio * 0.4
-                score += tag_score
-                logger.debug(f"    Tag match: {matching_terms}/{len(query_terms)} terms = {tag_score:.3f}")
+            # Best: full phrase appears in a tag
+            if any(self._phrase_in_text(query_lower, tag) for tag in all_tags):
+                score += 0.4
+                logger.debug(f"    Tag match: full phrase '{query_lower}' in tag = 0.400")
+            else:
+                # Count how many SPECIFIC terms match any tag (word-boundary)
+                check_terms = specific_terms if specific_terms else query_terms
+                matching_specific = 0
+                for term in check_terms:
+                    if any(self._term_in_text(term, tag) for tag in all_tags):
+                        matching_specific += 1
+                
+                if matching_specific > 0:
+                    denom = len(check_terms)
+                    tag_ratio = matching_specific / denom
+                    tag_score = tag_ratio * 0.4
+                    score += tag_score
+                    logger.debug(f"    Tag match: {matching_specific}/{denom} specific terms = {tag_score:.3f}")
         
         # Product name matches (high weight - 30%)
         if product_lower:
-            matching_terms = sum(1 for term in query_terms if term in product_lower or any(term in word for word in product_lower.split()))
+            matching_terms = sum(1 for term in query_terms if self._term_in_text(term, product_lower))
             if matching_terms > 0:
                 product_ratio = matching_terms / len(query_terms)
                 product_score = product_ratio * 0.3
@@ -565,8 +632,7 @@ class DemoVideoService:
                 logger.debug(f"    Product match: {matching_terms}/{len(query_terms)} terms = {product_score:.3f}")
         
         # Filename matches (medium weight - 20%)
-        filename_words = set(filename_lower.split())
-        matching_terms = sum(1 for term in query_terms if any(term in word for word in filename_words) or term in filename_lower)
+        matching_terms = sum(1 for term in query_terms if self._term_in_text(term, filename_lower))
         if matching_terms > 0:
             filename_ratio = matching_terms / len(query_terms)
             filename_score = filename_ratio * 0.2
