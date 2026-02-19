@@ -303,6 +303,7 @@ class DemoVideoService:
     _DOMAIN_STOPWORDS = {
         'security', 'network', 'cisco', 'demo', 'video',
         'firewall', 'threat', 'policy', 'defense', 'detection',
+        'protection', 'management',
     }
 
     # Compound words that users type as one word but are stored as
@@ -619,8 +620,15 @@ class DemoVideoService:
                     denom = len(check_terms)
                     tag_ratio = matching_specific / denom
                     tag_score = tag_ratio * 0.4
+                    # Penalize heavily when multi-term queries only partially match.
+                    # Matching 1 of 2 terms (e.g. 'protection' from 'cloud protection')
+                    # should not give a high suggestion score.
+                    if len(check_terms) > 1 and matching_specific < len(check_terms):
+                        tag_score *= 0.3  # 70% penalty for partial multi-term match
+                        logger.debug(f"    Tag match: {matching_specific}/{denom} specific terms = {tag_score:.3f} (penalized - partial multi-term)")
+                    else:
+                        logger.debug(f"    Tag match: {matching_specific}/{denom} specific terms = {tag_score:.3f}")
                     score += tag_score
-                    logger.debug(f"    Tag match: {matching_specific}/{denom} specific terms = {tag_score:.3f}")
         
         # Product name matches (high weight - 30%)
         if product_lower:
@@ -628,16 +636,26 @@ class DemoVideoService:
             if matching_terms > 0:
                 product_ratio = matching_terms / len(query_terms)
                 product_score = product_ratio * 0.3
+                # Same partial-match penalty for product name
+                if len(query_terms) > 1 and matching_terms < len(query_terms):
+                    product_score *= 0.3
+                    logger.debug(f"    Product match: {matching_terms}/{len(query_terms)} terms = {product_score:.3f} (penalized)")
+                else:
+                    logger.debug(f"    Product match: {matching_terms}/{len(query_terms)} terms = {product_score:.3f}")
                 score += product_score
-                logger.debug(f"    Product match: {matching_terms}/{len(query_terms)} terms = {product_score:.3f}")
         
         # Filename matches (medium weight - 20%)
         matching_terms = sum(1 for term in query_terms if self._term_in_text(term, filename_lower))
         if matching_terms > 0:
             filename_ratio = matching_terms / len(query_terms)
             filename_score = filename_ratio * 0.2
+            # Same partial-match penalty for filename
+            if len(query_terms) > 1 and matching_terms < len(query_terms):
+                filename_score *= 0.3
+                logger.debug(f"    Filename match: {matching_terms}/{len(query_terms)} terms = {filename_score:.3f} (penalized)")
+            else:
+                logger.debug(f"    Filename match: {matching_terms}/{len(query_terms)} terms = {filename_score:.3f}")
             score += filename_score
-            logger.debug(f"    Filename match: {matching_terms}/{len(query_terms)} terms = {filename_score:.3f}")
         
         # RAG score (low weight - 10% - already considered in search)
         # Normalize RAG score (typically 0-1, but can be negative for distance)
@@ -744,12 +762,11 @@ class DemoVideoService:
                         rag_score
                     )
                     
-                    logger.info(f"  📊 Relevance score: {relevance_score:.3f} (threshold: 0.2)")
+                    logger.info(f"  📊 Relevance score: {relevance_score:.3f} (threshold: 0.3)")
                     
                     # If relevance is reasonable, add as suggestion
-                    # Lowered threshold to 0.2 to catch more relevant suggestions
-                    if relevance_score > 0.2:  # Threshold for suggestions (lowered from 0.3)
-                        logger.info(f"  💡 SUGGESTION - Relevance: {relevance_score:.3f} > 0.2")
+                    if relevance_score > 0.3:  # Threshold for suggestions
+                        logger.info(f"  💡 SUGGESTION - Relevance: {relevance_score:.3f} > 0.3")
                         # Store as suggestion (will be added to videos if no precise matches)
                         suggestions.append({
                             "result": result,
@@ -759,7 +776,7 @@ class DemoVideoService:
                             "filename": filename
                         })
                     else:
-                        logger.warning(f"  ❌ REJECTED - Relevance too low: {relevance_score:.3f} <= 0.2")
+                        logger.warning(f"  ❌ REJECTED - Relevance too low: {relevance_score:.3f} <= 0.3")
                     continue
                 
                 logger.info(f"  ✅ ACCEPTED - Precise match found")
@@ -834,9 +851,9 @@ class DemoVideoService:
                     filename_lower = sug.get('filename', '').lower()
                     # If query terms match filename, boost relevance
                     if any(term in filename_lower for term in cleaned_query_terms):
-                        if sug['relevance_score'] < 0.2:
+                        if sug['relevance_score'] < 0.3:
                             logger.info(f"Boosting suggestion '{sug.get('filename')}' - query terms match filename")
-                            sug['relevance_score'] = max(0.2, sug['relevance_score'] + 0.1)
+                            sug['relevance_score'] = max(0.3, sug['relevance_score'] + 0.1)
                 
                 # Re-sort after boosting
                 suggestions.sort(key=lambda x: (x['relevance_score'], x['rag_score']), reverse=True)

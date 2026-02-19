@@ -28,8 +28,8 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
-    documents = relationship("Document", back_populates="owner")
-    chat_sessions = relationship("ChatSession", back_populates="user")
-    knowledge_bases = relationship("KnowledgeBase", back_populates="owner")
+    # Relationships - cascade delete so removing a user cleans up all their data
+    documents = relationship("Document", back_populates="owner", cascade="all, delete-orphan")
+    chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
+    knowledge_bases = relationship("KnowledgeBase", back_populates="owner", cascade="all, delete-orphan")
 
