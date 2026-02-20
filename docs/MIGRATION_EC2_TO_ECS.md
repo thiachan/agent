@@ -228,7 +228,7 @@ cat > /tmp/agent-secrets.json <<SECRETSEOF
   "CISCO_CLIENT_SECRET": "YOUR_CISCO_CLIENT_SECRET",
   "CISCO_ENDPOINT":      "https://chat-ai.cisco.com/openai/deployments/gpt-4.1/chat/completions",
   "CISCO_APPKEY":        "YOUR_CISCO_APPKEY",
-  "PRESENTON_API_URL":   "http://172.31.11.64:80",
+  "PRESENTON_API_URL":   "http://172.31.11.64:80",  // ← update after Phase 5b
   "PRESENTON_API_KEY":   "",
   "PRESENTON_REQUIRE_AUTH": "false",
   "PRESENTON_MAX_SLIDES": "12",
@@ -513,6 +513,156 @@ echo "EFS_ID: $EFS_ID  ← save this for terraform.tfvars"
 ```
 
 > Set `VECTOR_DB_PATH=/mnt/efs` in the ECS task definition environment variables, and add an EFS volume mount to the task definition in Terraform. This gives all ECS tasks the same shared ChromaDB state.
+
+---
+
+## Phase 5b — Connect to Presenton ECS Service (10 minutes)
+
+> EC2 still serving all traffic. Presenton is already running on ECS in us-west-1 — you just need a stable DNS name and network connectivity.
+
+### Step 5b.1 — Find Presenton's stable DNS
+
+The private IP `172.31.11.64` is an EC2 instance IP, not a stable address. Find the ALB or Service Connect DNS instead:
+
+```bash
+# List all load balancers in us-west-1
+aws elbv2 describe-load-balancers --region us-west-1 \
+  --query 'LoadBalancers[*].{Name:LoadBalancerName,DNS:DNSName,Scheme:Scheme,VPC:VpcId}' \
+  --output table
+
+# Look for the Presenton ALB — note its DNS and Scheme (internal vs internet-facing)
+# Also note its VpcId
+```
+
+### Step 5b.2 — Determine VPC relationship
+
+```bash
+# Your current EC2 VPC
+CURRENT_VPC=$(curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/$(curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/)/vpc-id)
+echo "Current VPC: $CURRENT_VPC"
+
+# Your new ECS VPC (created by Terraform)
+NEW_ECS_VPC=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw vpc_id 2>/dev/null || \
+  aws ec2 describe-vpcs --filters "Name=tag:Name,Values=agent-prod-vpc" \
+  --query 'Vpcs[0].VpcId' --output text --region us-west-1)
+echo "New ECS VPC: $NEW_ECS_VPC"
+
+# Presenton VPC (from the ALB VpcId noted above)
+PRESENTON_VPC="vpc-XXXXXXXXX"  # fill in from Step 5b.1
+```
+
+### Step 5b.3 — Choose connectivity option
+
+**If Presenton ALB scheme is `internet-facing`** (simplest):
+```bash
+# Just update the URL in Secrets Manager — no network changes needed
+PRESENTON_DNS="presenton-alb-xxxx.us-west-1.elb.amazonaws.com"  # from Step 5b.1
+
+# Update the secret
+SECRETS_ARN=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw secrets_manager_arn)
+CURRENT=$(aws secretsmanager get-secret-value --secret-id "$SECRETS_ARN" \
+  --query SecretString --output text --region us-west-1)
+UPDATED=$(echo "$CURRENT" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+d['PRESENTON_API_URL'] = 'http://$PRESENTON_DNS'
+print(json.dumps(d))")
+aws secretsmanager put-secret-value \
+  --secret-id "$SECRETS_ARN" \
+  --secret-string "$UPDATED" \
+  --region us-west-1
+echo "✅ PRESENTON_API_URL updated to http://$PRESENTON_DNS"
+```
+
+**If Presenton ALB scheme is `internal`** (requires VPC peering):
+```bash
+# Create VPC peering connection between your new ECS VPC and Presenton's VPC
+PEERING_ID=$(aws ec2 create-vpc-peering-connection \
+  --vpc-id "$NEW_ECS_VPC" \
+  --peer-vpc-id "$PRESENTON_VPC" \
+  --region us-west-1 \
+  --query 'VpcPeeringConnection.VpcPeeringConnectionId' --output text)
+echo "Peering connection: $PEERING_ID"
+
+# Accept the peering request (both VPCs are in the same account/region)
+aws ec2 accept-vpc-peering-connection \
+  --vpc-peering-connection-id "$PEERING_ID" \
+  --region us-west-1
+
+# Add route in your new ECS VPC route tables → Presenton VPC CIDR
+PRESENTON_CIDR=$(aws ec2 describe-vpcs --vpc-ids "$PRESENTON_VPC" \
+  --query 'Vpcs[0].CidrBlock' --output text --region us-west-1)
+
+# Get private route tables in new ECS VPC and add routes
+for RT_ID in $(aws ec2 describe-route-tables \
+  --filters "Name=vpc-id,Values=$NEW_ECS_VPC" "Name=association.main,Values=false" \
+  --query 'RouteTables[*].RouteTableId' --output text --region us-west-1); do
+  aws ec2 create-route \
+    --route-table-id "$RT_ID" \
+    --destination-cidr-block "$PRESENTON_CIDR" \
+    --vpc-peering-connection-id "$PEERING_ID" \
+    --region us-west-1
+  echo "Route added to $RT_ID"
+done
+
+# Allow inbound port 80 on Presenton's security group from your ECS tasks' SG
+PRESENTON_SG=$(aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=$PRESENTON_VPC" "Name=group-name,Values=*presenton*" \
+  --query 'SecurityGroups[0].GroupId' --output text --region us-west-1)
+ECS_TASKS_SG=$(aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=$NEW_ECS_VPC" "Name=group-name,Values=*ecs-tasks*" \
+  --query 'SecurityGroups[0].GroupId' --output text --region us-west-1)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id "$PRESENTON_SG" \
+  --protocol tcp --port 80 \
+  --source-group "$ECS_TASKS_SG" \
+  --region us-west-1
+echo "✅ VPC peering and security group rules configured"
+
+# Update the secret to use Presenton's internal ALB DNS
+PRESENTON_DNS="presenton-internal-alb-xxxx.us-west-1.elb.amazonaws.com"  # from Step 5b.1
+SECRETS_ARN=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw secrets_manager_arn)
+CURRENT=$(aws secretsmanager get-secret-value --secret-id "$SECRETS_ARN" \
+  --query SecretString --output text --region us-west-1)
+UPDATED=$(echo "$CURRENT" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+d['PRESENTON_API_URL'] = 'http://$PRESENTON_DNS'
+print(json.dumps(d))")
+aws secretsmanager put-secret-value \
+  --secret-id "$SECRETS_ARN" \
+  --secret-string "$UPDATED" \
+  --region us-west-1
+echo "✅ PRESENTON_API_URL updated to internal ALB"
+```
+
+### Step 5b.4 — Test Presenton is reachable from your new ECS VPC
+
+```bash
+# Run a one-off ECS task in your cluster to test connectivity
+ECS_CLUSTER=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw ecs_cluster_name)
+PRESENTON_DNS="presenton-alb-xxxx.us-west-1.elb.amazonaws.com"  # fill in
+
+# Get a subnet and SG from your ECS cluster
+SUBNET=$(aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=$NEW_ECS_VPC" "Name=tag:Name,Values=*private*" \
+  --query 'Subnets[0].SubnetId' --output text --region us-west-1)
+SG=$(aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=$NEW_ECS_VPC" "Name=group-name,Values=*ecs-tasks*" \
+  --query 'SecurityGroups[0].GroupId' --output text --region us-west-1)
+
+aws ecs run-task \
+  --cluster "$ECS_CLUSTER" \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG]}" \
+  --overrides "{\"containerOverrides\":[{\"name\":\"backend\",\"command\":[\"curl\",\"-sv\",\"http://$PRESENTON_DNS/health\"]}]}" \
+  --task-definition agent-prod-backend \
+  --region us-west-1
+
+# Check CloudWatch logs for the curl output (~30 seconds after)
+aws logs tail /ecs/agent-prod/backend --since 2m --region us-west-1
+```
 
 ---
 
