@@ -114,7 +114,7 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 echo "Account ID: $AWS_ACCOUNT_ID"
 
 # Create state bucket (versioned, encrypted)
-aws s3 mb s3://agent-tfstate-${AWS_ACCOUNT_ID} --region us-east-1
+aws s3 mb s3://agent-tfstate-${AWS_ACCOUNT_ID} --region us-west-1
 aws s3api put-bucket-versioning \
   --bucket agent-tfstate-${AWS_ACCOUNT_ID} \
   --versioning-configuration Status=Enabled
@@ -125,7 +125,7 @@ aws dynamodb create-table \
   --attribute-definitions AttributeName=LockID,AttributeType=S \
   --key-schema AttributeName=LockID,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST \
-  --region us-east-1
+  --region us-west-1
 
 echo "State infrastructure ready"
 ```
@@ -146,7 +146,7 @@ grep "bucket" versions.tf
 
 ```bash
 cat > /home/ubuntu/AGENT/infra/terraform/terraform.tfvars <<EOF
-aws_region   = "us-east-1"
+aws_region   = "us-west-1"
 project      = "agent"
 environment  = "prod"
 
@@ -177,13 +177,13 @@ terraform apply     # type "yes" when prompted
 Apply complete! Resources: 62 added, 0 changed, 0 destroyed.
 
 Outputs:
-  alb_dns_name          = "agent-prod-alb-xxxx.us-east-1.elb.amazonaws.com"
-  ecr_backend_url       = "123456789.dkr.ecr.us-east-1.amazonaws.com/agent-prod-backend"
-  ecr_frontend_url      = "123456789.dkr.ecr.us-east-1.amazonaws.com/agent-prod-frontend"
-  rds_endpoint          = "agent-prod-aurora.cluster-xxxx.us-east-1.rds.amazonaws.com"
+  alb_dns_name          = "agent-prod-alb-xxxx.us-west-1.elb.amazonaws.com"
+  ecr_backend_url       = "123456789.dkr.ecr.us-west-1.amazonaws.com/agent-prod-backend"
+  ecr_frontend_url      = "123456789.dkr.ecr.us-west-1.amazonaws.com/agent-prod-frontend"
+  rds_endpoint          = "agent-prod-aurora.cluster-xxxx.us-west-1.rds.amazonaws.com"
   s3_uploads_bucket     = "agent-prod-uploads-123456789"
   s3_generated_bucket   = "agent-prod-generated-123456789"
-  secrets_manager_arn   = "arn:aws:secretsmanager:us-east-1:123456789:secret:agent-prod-app-secrets-xxxx"
+  secrets_manager_arn   = "arn:aws:secretsmanager:us-west-1:123456789:secret:agent-prod-app-secrets-xxxx"
   ecs_cluster_name      = "agent-prod-cluster"
 ```
 
@@ -248,7 +248,7 @@ SECRETSEOF
 aws secretsmanager put-secret-value \
   --secret-id "$SECRETS_ARN" \
   --secret-string file:///tmp/agent-secrets.json \
-  --region us-east-1
+  --region us-west-1
 
 # Clean up — never leave secrets in /tmp
 rm /tmp/agent-secrets.json
@@ -270,14 +270,14 @@ The RDS security group only allows traffic from ECS tasks by default. Temporaril
 EC2_PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
 RDS_SG_ID=$(aws ec2 describe-security-groups \
   --filters "Name=group-name,Values=agent-prod-rds-sg" \
-  --query 'SecurityGroups[0].GroupId' --output text --region us-east-1)
+  --query 'SecurityGroups[0].GroupId' --output text --region us-west-1)
 
 aws ec2 authorize-security-group-ingress \
   --group-id "$RDS_SG_ID" \
   --protocol tcp \
   --port 5432 \
   --cidr "${EC2_PRIVATE_IP}/32" \
-  --region us-east-1
+  --region us-west-1
 
 echo "EC2 ($EC2_PRIVATE_IP) can now reach RDS"
 ```
@@ -385,7 +385,7 @@ S3_GENERATED=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw s
 # Sync uploads
 if [ -d "/home/ubuntu/AGENT/backend/uploads" ] && [ "$(ls -A /home/ubuntu/AGENT/backend/uploads)" ]; then
   aws s3 sync /home/ubuntu/AGENT/backend/uploads/ "s3://${S3_UPLOADS}/uploads/" \
-    --region us-east-1 --no-progress
+    --region us-west-1 --no-progress
   echo "✅ Uploads synced to S3"
 else
   echo "uploads/ is empty — nothing to sync"
@@ -395,7 +395,7 @@ fi
 if [ -d "/home/ubuntu/AGENT/backend/temp_generated_files" ] && [ "$(ls -A /home/ubuntu/AGENT/backend/temp_generated_files)" ]; then
   aws s3 sync /home/ubuntu/AGENT/backend/temp_generated_files/ \
     "s3://${S3_GENERATED}/temp_generated_files/" \
-    --region us-east-1 --no-progress
+    --region us-west-1 --no-progress
   echo "✅ Generated files synced to S3"
 else
   echo "temp_generated_files/ is empty — nothing to sync"
@@ -481,7 +481,7 @@ psql "postgresql://agentuser:${DB_PASS}@${RDS_ENDPOINT}:5432/agentdb" \
 ```bash
 # Create EFS filesystem
 EFS_ID=$(aws efs create-file-system \
-  --region us-east-1 \
+  --region us-west-1 \
   --performance-mode generalPurpose \
   --throughput-mode bursting \
   --tags Key=Name,Value=agent-prod-chromadb \
@@ -492,21 +492,21 @@ echo "EFS ID: $EFS_ID"
 SUBNET_IDS=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform \
   output -json | python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join([]))" 2>/dev/null || \
   aws ec2 describe-subnets --filters "Name=tag:Name,Values=agent-prod-private-*" \
-  --query 'Subnets[*].SubnetId' --output text --region us-east-1)
+  --query 'Subnets[*].SubnetId' --output text --region us-west-1)
 
 # Create mount targets in each private subnet (ECS tasks will mount EFS here)
 for SUBNET in $SUBNET_IDS; do
   aws efs create-mount-target \
     --file-system-id "$EFS_ID" \
     --subnet-id "$SUBNET" \
-    --region us-east-1
+    --region us-west-1
   echo "Mount target created in $SUBNET"
 done
 
 # Sync current ChromaDB to EFS (mount EFS on EC2 first)
 sudo apt install nfs-common -y
 sudo mkdir -p /mnt/efs-chromadb
-sudo mount -t nfs4 "${EFS_ID}.efs.us-east-1.amazonaws.com:/" /mnt/efs-chromadb
+sudo mount -t nfs4 "${EFS_ID}.efs.us-west-1.amazonaws.com:/" /mnt/efs-chromadb
 sudo cp -r /home/ubuntu/AGENT/backend/vector_db/* /mnt/efs-chromadb/
 echo "✅ ChromaDB copied to EFS"
 echo "EFS_ID: $EFS_ID  ← save this for terraform.tfvars"
@@ -530,8 +530,8 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ALB_DNS=$(terraform -chdir=infra/terraform output -raw alb_dns_name)
 
 # Login to ECR
-aws ecr get-login-password --region us-east-1 | \
-  docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
+aws ecr get-login-password --region us-west-1 | \
+  docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.us-west-1.amazonaws.com"
 
 SHORT_SHA=$(git rev-parse --short HEAD)
 
@@ -603,7 +603,7 @@ ALB_DNS=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw alb_dn
 aws ecs describe-services \
   --cluster "$ECS_CLUSTER" \
   --services agent-prod-backend-svc agent-prod-frontend-svc \
-  --region us-east-1 \
+  --region us-west-1 \
   --query 'services[*].{Name:serviceName,Running:runningCount,Desired:desiredCount,Status:status}' \
   --output table
 
@@ -612,7 +612,7 @@ echo "Waiting for ECS services to stabilize..."
 aws ecs wait services-stable \
   --cluster "$ECS_CLUSTER" \
   --services agent-prod-backend-svc agent-prod-frontend-svc \
-  --region us-east-1
+  --region us-west-1
 echo "✅ ECS services stable"
 
 # Test backend via ALB
@@ -638,10 +638,10 @@ echo "  7. Generate an MP3/podcast — should play"
 **Check CloudWatch logs if anything fails:**
 ```bash
 # Tail backend logs
-aws logs tail /ecs/agent-prod/backend --follow --region us-east-1
+aws logs tail /ecs/agent-prod/backend --follow --region us-west-1
 
 # Tail frontend logs
-aws logs tail /ecs/agent-prod/frontend --follow --region us-east-1
+aws logs tail /ecs/agent-prod/frontend --follow --region us-west-1
 ```
 
 ---
@@ -760,7 +760,7 @@ aws cloudwatch get-metric-statistics \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 60 \
   --statistics Sum \
-  --region us-east-1
+  --region us-west-1
 ```
 
 ---
@@ -782,10 +782,10 @@ Zero data risk on rollback — EC2 and ECS both read from the same RDS + S3 afte
 **After 2 weeks of stable ECS operation:**
 ```bash
 # Stop EC2 (don't terminate yet — keep EBS snapshot)
-aws ec2 stop-instances --instance-ids YOUR_INSTANCE_ID --region us-east-1
+aws ec2 stop-instances --instance-ids YOUR_INSTANCE_ID --region us-west-1
 
 # Wait 1 more week, then terminate
-aws ec2 terminate-instances --instance-ids YOUR_INSTANCE_ID --region us-east-1
+aws ec2 terminate-instances --instance-ids YOUR_INSTANCE_ID --region us-west-1
 ```
 
 ---
@@ -822,8 +822,8 @@ aws ec2 terminate-instances --instance-ids YOUR_INSTANCE_ID --region us-east-1
 aws ecs describe-tasks \
   --cluster agent-prod-cluster \
   --tasks $(aws ecs list-tasks --cluster agent-prod-cluster --desired-status STOPPED \
-    --query 'taskArns[0]' --output text --region us-east-1) \
-  --region us-east-1 \
+    --query 'taskArns[0]' --output text --region us-west-1) \
+  --region us-west-1 \
   --query 'tasks[0].containers[*].{name:name,reason:reason,exitCode:exitCode}'
 ```
 
