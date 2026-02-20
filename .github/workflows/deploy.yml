@@ -1,0 +1,166 @@
+name: Build → ECR → Deploy to ECS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION:        us-east-1
+  ECR_REGISTRY:      ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  BACKEND_IMAGE:     agent-backend
+  FRONTEND_IMAGE:    agent-frontend
+  ECS_CLUSTER:       agent-prod-cluster
+  BACKEND_SERVICE:   agent-prod-backend-svc
+  FRONTEND_SERVICE:  agent-prod-frontend-svc
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. Build backend ────────────────────────────────────────────────────────
+  build-backend:
+    name: Build & Push Backend
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        id: push
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          IMAGE="$ECR_REGISTRY/$BACKEND_IMAGE"
+          docker build \
+            --file backend/Dockerfile \
+            --tag "$IMAGE:$SHORT_SHA" \
+            --tag "$IMAGE:latest" \
+            --cache-from "$IMAGE:latest" \
+            ./backend
+          docker push "$IMAGE:$SHORT_SHA"
+          docker push "$IMAGE:latest"
+          echo "image=$IMAGE:$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+  # ── 2. Build frontend ───────────────────────────────────────────────────────
+  build-frontend:
+    name: Build & Push Frontend
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        id: push
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          IMAGE="$ECR_REGISTRY/$FRONTEND_IMAGE"
+          docker build \
+            --file Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL="${{ secrets.NEXT_PUBLIC_API_URL }}" \
+            --build-arg NEXT_BUILD_STANDALONE=true \
+            --tag "$IMAGE:$SHORT_SHA" \
+            --tag "$IMAGE:latest" \
+            --cache-from "$IMAGE:latest" \
+            .
+          docker push "$IMAGE:$SHORT_SHA"
+          docker push "$IMAGE:latest"
+          echo "image=$IMAGE:$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+  # ── 3. Rolling deploy — EC2 stays untouched ─────────────────────────────────
+  deploy:
+    name: Deploy to ECS (rolling, zero-downtime)
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      # Backend deploy
+      - name: Get current backend task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition agent-prod-backend \
+            --query taskDefinition > /tmp/backend-td.json
+
+      - name: Inject new backend image
+        id: render-backend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: /tmp/backend-td.json
+          container-name:  agent-prod-backend
+          image:           ${{ needs.build-backend.outputs.image }}
+
+      - name: Deploy backend
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition:           ${{ steps.render-backend.outputs.task-definition }}
+          service:                   ${{ env.BACKEND_SERVICE }}
+          cluster:                   ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      # Frontend deploy
+      - name: Get current frontend task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition agent-prod-frontend \
+            --query taskDefinition > /tmp/frontend-td.json
+
+      - name: Inject new frontend image
+        id: render-frontend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: /tmp/frontend-td.json
+          container-name:  agent-prod-frontend
+          image:           ${{ needs.build-frontend.outputs.image }}
+
+      - name: Deploy frontend
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition:           ${{ steps.render-frontend.outputs.task-definition }}
+          service:                   ${{ env.FRONTEND_SERVICE }}
+          cluster:                   ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      # Smoke test
+      - name: Smoke test
+        run: |
+          for i in {1..6}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.BACKEND_ALB_URL }}/health" || echo "000")
+            [[ "$STATUS" == "200" ]] && { echo "✅ Backend healthy"; exit 0; }
+            echo "Attempt $i: HTTP $STATUS — waiting 15s..."
+            sleep 15
+          done
+          echo "❌ Health check failed" && exit 1

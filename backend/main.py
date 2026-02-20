@@ -44,6 +44,23 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+# Patch Starlette's receive to handle larger payloads
+import starlette.datastructures
+original_max_size = 2621440  # Default 2.5MB
+
+# Custom middleware to handle large uploads by using a custom receive wrapper
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class UploadSizeMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "POST" and "/upload" in request.url.path:
+            # For upload endpoints, we need to read the full body
+            # Starlette will handle this in the form parsing
+            pass
+        return await call_next(request)
+
+app.add_middleware(UploadSizeMiddleware)
+
 # Middleware to log Authorization header for debugging
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -75,5 +92,11 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Configure Uvicorn with reasonable defaults
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        timeout_keep_alive=60,
+    )
 

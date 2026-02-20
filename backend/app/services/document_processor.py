@@ -6,7 +6,7 @@ from docx import Document as DocxDocument
 from openpyxl import load_workbook
 from pptx import Presentation
 from pydub import AudioSegment
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from app.core.config import settings
 
 # Optional imports for audio/video transcription

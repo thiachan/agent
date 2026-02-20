@@ -1,0 +1,33 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+env/
+
+# Local runtime data — these live on S3/RDS in ECS
+uploads/
+temp_generated_files/
+vector_db/
+*.db
+*.sqlite3
+*.sqlite
+*.log
+
+# Tests
+.pytest_cache/
+.coverage
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Secrets — never bake into image
+.env
+.env.*
+!.env.example

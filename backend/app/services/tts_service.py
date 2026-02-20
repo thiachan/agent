@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 class TTSService:
     """Service for converting text to speech audio files with OpenAI TTS"""
     
+    # OpenAI TTS character limit per API call
+    OPENAI_TTS_CHAR_LIMIT = 4096
+
     def __init__(self):
         self.supported_formats = ["mp3", "wav"]
         self.default_language = "en"
@@ -79,20 +82,54 @@ class TTSService:
                 # Parse dialogue and generate with different voices
                 return self._generate_dialogue_audio(client, text, audio_format)
             else:
-                # Single voice generation
-                response = client.audio.speech.create(
-                    model="tts-1",  # or "tts-1-hd" for higher quality (more expensive)
-                    voice=self.openai_voices["host"],
-                    input=text[:4096],  # OpenAI TTS limit
-                    response_format=audio_format
-                )
-                
-                audio_data = b""
-                for chunk in response.iter_bytes():
-                    audio_data += chunk
-                
-                logger.info(f"Successfully converted {len(text)} characters to {audio_format.upper()} audio using OpenAI TTS")
-                return audio_data
+                # Single voice generation — split into chunks if text > 4096 chars
+                chunks = self._split_text_into_chunks(text, self.OPENAI_TTS_CHAR_LIMIT)
+                logger.info(f"Speech text: {len(text)} chars -> {len(chunks)} chunk(s) (limit {self.OPENAI_TTS_CHAR_LIMIT})")
+
+                if len(chunks) == 1:
+                    # Short text — single API call
+                    response = client.audio.speech.create(
+                        model="tts-1",
+                        voice=self.openai_voices["host"],
+                        input=chunks[0],
+                        response_format=audio_format
+                    )
+                    audio_data = b""
+                    for chunk in response.iter_bytes():
+                        audio_data += chunk
+                    logger.info(f"Successfully converted {len(text)} characters to {audio_format.upper()} audio using OpenAI TTS")
+                    return audio_data
+                else:
+                    # Long text — generate per chunk, then merge
+                    audio_segments = []
+                    for idx, text_chunk in enumerate(chunks):
+                        logger.info(f"  Generating audio chunk {idx+1}/{len(chunks)} ({len(text_chunk)} chars)")
+                        response = client.audio.speech.create(
+                            model="tts-1",
+                            voice=self.openai_voices["host"],
+                            input=text_chunk,
+                            response_format=audio_format
+                        )
+                        segment = b""
+                        for chunk_bytes in response.iter_bytes():
+                            segment += chunk_bytes
+                        if segment:
+                            audio_segments.append(segment)
+
+                    if not audio_segments:
+                        raise ValueError("No audio segments generated")
+
+                    if len(audio_segments) == 1:
+                        return audio_segments[0]
+
+                    # Merge segments
+                    try:
+                        merged = self._merge_audio_segments(audio_segments, audio_format)
+                        logger.info(f"Successfully merged {len(audio_segments)} speech chunks")
+                        return merged
+                    except Exception as merge_err:
+                        logger.warning(f"Merge failed ({merge_err}), falling back to concatenation")
+                        return self._simple_concatenate_audio(audio_segments)
                 
         except ImportError:
             raise ValueError("OpenAI library not installed. Install with: pip install openai")
@@ -137,18 +174,33 @@ class TTSService:
                 speaker_label = "Host"
                 logger.warning(f"Unknown speaker '{speaker}', defaulting to Host voice")
             
-            # Generate audio for this segment
+            # Generate audio for this segment (split if > 4096 chars)
             try:
-                response = client.audio.speech.create(
-                    model="tts-1",  # or "tts-1-hd" for higher quality
-                    voice=voice,
-                    input=text[:4096],
-                    response_format=audio_format  # Use requested format directly
-                )
-                
-                segment_audio = b""
-                for chunk in response.iter_bytes():
-                    segment_audio += chunk
+                text_chunks = self._split_text_into_chunks(text, self.OPENAI_TTS_CHAR_LIMIT)
+                segment_parts = []
+                for ci, tc in enumerate(text_chunks):
+                    response = client.audio.speech.create(
+                        model="tts-1",
+                        voice=voice,
+                        input=tc,
+                        response_format=audio_format
+                    )
+                    part = b""
+                    for chunk in response.iter_bytes():
+                        part += chunk
+                    if part:
+                        segment_parts.append(part)
+
+                # If the segment was split, merge its parts first
+                if len(segment_parts) == 1:
+                    segment_audio = segment_parts[0]
+                elif segment_parts:
+                    try:
+                        segment_audio = self._merge_audio_segments(segment_parts, audio_format)
+                    except Exception:
+                        segment_audio = self._simple_concatenate_audio(segment_parts)
+                else:
+                    segment_audio = b""
                 
                 if segment_audio:
                     audio_data_list.append(segment_audio)
@@ -185,6 +237,58 @@ class TTSService:
                 logger.warning(f"⚠ Returning first segment only ({len(audio_data_list[0])} bytes)")
                 return audio_data_list[0]
     
+    def _split_text_into_chunks(self, text: str, max_chars: int = 4096) -> List[str]:
+        """
+        Split text into chunks that fit within the OpenAI TTS character limit.
+        Splits at sentence boundaries (period, exclamation, question mark) to
+        avoid cutting words mid-sentence.
+
+        Returns a list of text chunks, each <= max_chars.
+        """
+        text = text.strip()
+        if len(text) <= max_chars:
+            return [text]
+
+        import re
+        # Split into sentences (keep the delimiter attached)
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+
+        chunks: List[str] = []
+        current_chunk = ""
+
+        for sentence in sentences:
+            # If a single sentence exceeds the limit, hard-split it
+            if len(sentence) > max_chars:
+                # Flush current chunk first
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = ""
+                # Hard-split at word boundaries
+                words = sentence.split()
+                for word in words:
+                    if len(current_chunk) + len(word) + 1 > max_chars:
+                        if current_chunk:
+                            chunks.append(current_chunk.strip())
+                        current_chunk = word
+                    else:
+                        current_chunk = f"{current_chunk} {word}" if current_chunk else word
+                continue
+
+            # Normal case: try to fit sentence into current chunk
+            if len(current_chunk) + len(sentence) + 1 > max_chars:
+                # Current chunk is full, start a new one
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence
+            else:
+                current_chunk = f"{current_chunk} {sentence}" if current_chunk else sentence
+
+        # Don't forget the last chunk
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+
+        return chunks
+
     def _merge_audio_segments(self, audio_data_list: List[bytes], audio_format: str) -> bytes:
         """Merge multiple audio segments into one file"""
         try:

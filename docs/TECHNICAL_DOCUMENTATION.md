@@ -194,7 +194,6 @@ src/
 - **Cisco GPT-4.1**: Primary LLM for chat (OAuth2 authentication)
 - **OpenAI API**: Embeddings (text-embedding-3-small) and TTS
 - **Presenton.ai**: PowerPoint generation
-- **HeyGen**: Video generation (optional)
 - **AWS Bedrock**: Alternative LLM provider (optional)
 
 ---
@@ -721,7 +720,6 @@ Current Question: {question}
 **Available Agents:**
 
 - `create_video`: Demo video search
-- `video_generate`: Video generation (HeyGen integration)
 - `create_ppt`: PowerPoint generation
 - `create_doc`: Document generation
 - `create_podcast`: Podcast generation

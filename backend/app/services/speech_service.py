@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class SpeechServiceConfig:
     """Independent configuration for Speech Service"""
     # LLM Configuration
-    TEMPERATURE: float = 0.7  # Moderate temperature for clear, focused speech
+    TEMPERATURE: float = 0.3  # Low temperature for factual, focused speech with minimal hallucination
     MAX_TOKENS: int = 8000  # Sufficient for speeches
     MODEL_ID: str = "auto"
     
@@ -90,6 +90,8 @@ CRITICAL INSTRUCTIONS:
 
 5. **BE THOROUGH**: Cover ALL major topics and details from the content. Don't skip important information.
 
+6. **ACCURACY CONSTRAINT**: Only use facts, data, and claims that are explicitly present in the provided content. Do NOT invent statistics, fabricate quotes, or add information not found in the source material. If the content lacks detail on a subtopic, acknowledge that briefly rather than making something up.
+
 **TOPIC:** {topic or 'the subject matter'}
 
 **CONTENT TO LEARN FROM:**
@@ -99,7 +101,7 @@ Now create a comprehensive, engaging speech that transforms this information int
     
     async def _invoke_llm(self, llm, prompt: str):
         """Invoke LLM with this service's max_tokens configuration"""
-        from langchain.schema import HumanMessage
+        from langchain_core.messages import HumanMessage
         from langchain_openai import AzureChatOpenAI
         
         messages = [HumanMessage(content=prompt)]
@@ -136,4 +138,6 @@ Now create a comprehensive, engaging speech that transforms this information int
 
 # Global instance - can be customized per service
 speech_service = SpeechService()
+
+
 

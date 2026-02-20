@@ -27,44 +27,34 @@ class Settings(BaseSettings):
     CISCO_DEPLOYMENT: str = os.getenv("CISCO_DEPLOYMENT", "")  # Optional: override deployment name (e.g., "gpt-4.1")
     CISCO_APPKEY: str = os.getenv("CISCO_APPKEY", "")  # Optional appkey for user field
     
-    # AWS Bedrock
+    # AWS Bedrock (optional - only if using Bedrock models)
     AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
     AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
     AWS_REGION: str = os.getenv("AWS_REGION", "us-east-1")
-    # Bedrock models can be specified multiple times or comma-separated
-    # Format: BEDROCK_CHAT_MODEL=model1,BEDROCK_CHAT_MODEL=model2 or BEDROCK_CHAT_MODELS=model1,model2
-    BEDROCK_CHAT_MODELS: str = os.getenv("BEDROCK_CHAT_MODELS", "")  # Comma-separated list
+    BEDROCK_CHAT_MODELS: str = os.getenv("BEDROCK_CHAT_MODELS", "")
     BEDROCK_EMBED_MODEL: str = os.getenv("BEDROCK_EMBED_MODEL", "amazon.titan-embed-text-v1")
     
     # Vector Database
     VECTOR_DB_PATH: str = os.getenv("VECTOR_DB_PATH", "./vector_db")
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "amazon.titan-embed-text-v1")  # Default to Bedrock
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "amazon.titan-embed-text-v1")
     
-    # External AI Services (Optional)
-    # Video Generation Services
-    SYNTHESIA_API_KEY: str = os.getenv("SYNTHESIA_API_KEY", "")
-    RUNWAYML_API_KEY: str = os.getenv("RUNWAYML_API_KEY", "")
+    # Phase 2: Optimized RAG Limits (can be disabled for rollback)
+    RAG_OPTIMIZED_LIMITS_ENABLED: bool = os.getenv("RAG_OPTIMIZED_LIMITS_ENABLED", "true").lower() == "true"
+    
+    
+    # Phase 2: Optimized RAG Limits (can be disabled for rollback)
+    # Set to False to revert to original limits (10 for QA, 20 for podcast)
+    RAG_OPTIMIZED_LIMITS_ENABLED: bool = os.getenv("RAG_OPTIMIZED_LIMITS_ENABLED", "true").lower() == "true"
     
     # Presenton.ai PowerPoint Generation
     PRESENTON_API_KEY: str = os.getenv("PRESENTON_API_KEY", "")
     PRESENTON_API_URL: str = os.getenv("PRESENTON_API_URL", "https://api.presenton.ai")
     PRESENTON_MAX_SLIDES: int = int(os.getenv("PRESENTON_MAX_SLIDES", "10"))
-    
-    # HeyGen Video Generation (Avatar IV)
-    HEYGEN_API_KEY: str = os.getenv("HEYGEN_API_KEY", "")
-    HEYGEN_API_URL: str = os.getenv("HEYGEN_API_URL", "https://api.heygen.com")
-    HEYGEN_IMAGE_KEY: str = os.getenv("HEYGEN_IMAGE_KEY", "")  # Image key for Avatar IV
-    HEYGEN_VOICE_ID: str = os.getenv("HEYGEN_VOICE_ID", "")  # Voice ID (if not set, will use default)
-    HEYGEN_VIDEO_ORIENTATION: str = os.getenv("HEYGEN_VIDEO_ORIENTATION", "landscape")  # "portrait" or "landscape"
-    HEYGEN_FIT: str = os.getenv("HEYGEN_FIT", "cover")  # "cover" or "contain"
-    HEYGEN_MAX_VIDEO_LENGTH: int = int(os.getenv("HEYGEN_MAX_VIDEO_LENGTH", "120"))  # 2 minutes in seconds
-    
-    # Video Agent Endpoint (if using external service)
-    VIDEO_AGENT_ENDPOINT: str = os.getenv("VIDEO_AGENT_ENDPOINT", "")
+    PRESENTON_REQUIRE_AUTH: bool = os.getenv("PRESENTON_REQUIRE_AUTH", "true").lower() == "true"
     
     # File Upload
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
-    MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100MB
+    MAX_FILE_SIZE: int = 500 * 1024 * 1024  # 500MB (increased from 100MB)
     ALLOWED_EXTENSIONS: List[str] = [
         "pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx",
         "mp4", "mov", "avi", "mp3", "wav", "m4a",

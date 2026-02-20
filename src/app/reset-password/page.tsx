@@ -75,25 +75,25 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg shadow-2xl p-8 max-w-md w-full">
-        <h1 className="text-2xl font-bold text-white mb-6 text-center">Reset Password</h1>
+        <h1 className="text-base font-bold text-white mb-6 text-center">Reset password</h1>
         
         {success ? (
           <div className="text-center">
-            <div className="bg-green-500/20 border border-green-500/50 text-green-300 px-4 py-3 rounded mb-4">
-              Password reset successfully! Redirecting to login...
+            <div className="bg-green-500/20 border border-green-500/50 text-green-300 px-4 py-3 rounded mb-4 text-xs">
+              Password reset successfully! redirecting to login...
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded">
+              <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded text-xs">
                 {error}
               </div>
             )}
             
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1">
-                New Password
+              <label htmlFor="password" className="block text-xs font-medium text-gray-300 mb-1">
+                New password
               </label>
               <input
                 id="password"
@@ -102,14 +102,14 @@ export default function ResetPasswordPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
-                className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
+                className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
                 placeholder="Enter new password (min 8 characters)"
               />
             </div>
             
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-1">
-                Confirm Password
+              <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-300 mb-1">
+                Confirm password
               </label>
               <input
                 id="confirmPassword"
@@ -118,7 +118,7 @@ export default function ResetPasswordPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={8}
-                className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
+                className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-md text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500/50"
                 placeholder="Confirm new password"
               />
             </div>
@@ -126,18 +126,18 @@ export default function ResetPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2 px-4 rounded-md hover:from-cyan-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg shadow-cyan-500/30"
+              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-2 px-4 rounded-md hover:from-cyan-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg shadow-cyan-500/30 text-sm"
             >
-              {loading ? 'Resetting...' : 'Reset Password'}
+              {loading ? 'Resetting...' : 'Reset password'}
             </button>
             
             <div className="text-center">
               <button
                 type="button"
                 onClick={() => router.push('/')}
-                className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
               >
-                Back to Login
+                Back to login
               </button>
             </div>
           </form>

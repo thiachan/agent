@@ -26,7 +26,7 @@ export default function Home() {
                   AGENT
                 </h1>
               </div>
-              <p className="text-base text-gray-400">AI for GSSO Engineering Team</p>
+              <p className="text-xs text-gray-400">AI for GSSO Engineering Team</p>
             </div>
             <LoginForm />
           </div>

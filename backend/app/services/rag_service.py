@@ -6,9 +6,9 @@ os.environ["CHROMA_CLIENT_TELEMETRY"] = "False"
 os.environ["CHROMA_TELEMETRY"] = "False"
 
 from typing import List, Dict, Optional
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from app.core.config import settings
 from app.services.model_manager import model_manager
 
@@ -85,8 +85,15 @@ class RAGService:
         
         try:
             logger.info(f"Splitting text into chunks for document {metadata.get('document_id')}")
-            texts = self.text_splitter.split_text(text)
-            logger.info(f"Split into {len(texts)} chunks")
+            
+            # Keep small documents as a single chunk to preserve context integrity
+            # (e.g., demo video docs where tags + URL + description should stay together)
+            if len(text.strip()) <= 1500:
+                texts = [text.strip()] if text.strip() else [" "]
+                logger.info(f"Small document ({len(text.strip())} chars) - keeping as single chunk")
+            else:
+                texts = self.text_splitter.split_text(text)
+                logger.info(f"Split into {len(texts)} chunks")
             
             if not texts:
                 logger.warning("No text chunks created, using empty text")
@@ -192,7 +199,7 @@ class RAGService:
                                         chunk_data = collection.get(ids=[chunk_id])
                                         if chunk_data and "documents" in chunk_data and chunk_data["documents"]:
                                             # Create a document-like object
-                                            from langchain.schema import Document
+                                            from langchain_core.documents import Document
                                             doc = Document(
                                                 page_content=chunk_data["documents"][0],
                                                 metadata=metadata
@@ -488,16 +495,37 @@ class RAGService:
                 search_query = enhanced_query
         
         # Get relevant context - use the search query (which may be enhanced with topic keywords)
-        # For podcasts, retrieve more content for comprehensive coverage
-        search_limit = 20 if content_type == "podcast" else 10
+        # Phase 2: Optimized RAG Limits - Reduced chunk limits for better performance
+        # Original limits: podcast=20, others=10
+        # Optimized limits: podcast=10, speech/doc/ppt/mp4=8, QA=6
+        # Can be disabled via RAG_OPTIMIZED_LIMITS_ENABLED=false for rollback
+        # Store in variable to avoid repeated access and for use in logging
+        # Import settings at function level to avoid scope issues
+        from app.core.config import settings as app_settings
+        rag_optimized_enabled = getattr(app_settings, 'RAG_OPTIMIZED_LIMITS_ENABLED', True)
+        if rag_optimized_enabled:
+            # Phase 2 optimized limits (lighter system, faster responses)
+            if content_type == "podcast":
+                search_limit = 10  # Reduced from 20 (still comprehensive with better chunks)
+            elif content_type in ["speech", "doc", "ppt", "mp4"]:
+                search_limit = 8  # Reduced from 10 (focused content generation - includes video/mp4)
+            else:
+                search_limit = 6  # Reduced from 10 (QA and general queries - focused)
+            logger.info(f"Phase 2: Using optimized RAG limits - {content_type or 'QA'}: {search_limit} chunks")
+        else:
+            # Original limits (for rollback)
+            search_limit = 20 if content_type == "podcast" else 10
+            logger.info(f"Using original RAG limits - {content_type or 'QA'}: {search_limit} chunks")
+        
         context_docs = self.search(search_query, user_role, limit=search_limit, previously_used_docs=previously_used_docs)
         
         # Log the search results for debugging
         if context_docs:
+            phase_info = "Phase 2 Optimized" if rag_optimized_enabled else "Original"
             if search_query != question:
-                logger.info(f"Retrieved {len(context_docs)} document chunks for action request: '{question}' (searched using topic: '{search_query[:100]}...')")
+                logger.info(f"[{phase_info}] Retrieved {len(context_docs)}/{search_limit} document chunks for action request: '{question}' (searched using topic: '{search_query[:100]}...')")
             else:
-                logger.info(f"Retrieved {len(context_docs)} document chunks for question: '{question}'")
+                logger.info(f"[{phase_info}] Retrieved {len(context_docs)}/{search_limit} document chunks for question: '{question}'")
             for i, doc in enumerate(context_docs[:5]):  # Log top 5
                 doc_name = doc["metadata"].get("filename", doc["metadata"].get("title", "Unknown"))
                 logger.info(f"  Chunk {i+1}: From '{doc_name}' (similarity score: {doc['score']:.4f})")
@@ -617,7 +645,7 @@ IMPORTANT: Before answering, check if the question contains pronouns or referenc
             # Check model type and invoke appropriately
             if isinstance(llm, AzureChatOpenAI):
                 # AzureChatOpenAI (Cisco) - use messages format
-                from langchain.schema import HumanMessage
+                from langchain_core.messages import HumanMessage
                 messages = [HumanMessage(content=formatted_prompt)]
                 logger.info(f"Invoking AzureChatOpenAI (Cisco) with {len(messages)} message(s)")
                 try:
@@ -722,7 +750,7 @@ IMPORTANT: Before answering, check if the question contains pronouns or referenc
                         raise
             elif isinstance(llm, ChatBedrock):
                 # ChatBedrock - use messages format
-                from langchain.schema import HumanMessage
+                from langchain_core.messages import HumanMessage
                 import time
                 messages = [HumanMessage(content=formatted_prompt)]
                 logger.info(f"Invoking ChatBedrock with {len(messages)} message(s)")
@@ -790,7 +818,7 @@ IMPORTANT: Before answering, check if the question contains pronouns or referenc
                         raise
             elif isinstance(llm, ChatOpenAI):
                 # Regular ChatOpenAI - use messages format
-                from langchain.schema import HumanMessage
+                from langchain_core.messages import HumanMessage
                 messages = [HumanMessage(content=formatted_prompt)]
                 logger.info(f"Invoking ChatOpenAI with {len(messages)} message(s)")
                 response = llm.invoke(messages)

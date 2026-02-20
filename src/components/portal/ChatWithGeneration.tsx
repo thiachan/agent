@@ -28,12 +28,12 @@ interface GenerationOption {
 }
 
 const generationOptions: GenerationOption[] = [
-  { type: 'ppt', label: 'PowerPoint', icon: <Presentation size={18} /> },
-  { type: 'mp4', label: 'Video', icon: <Video size={18} /> },
-  { type: 'doc', label: 'Document', icon: <FileText size={18} /> },
-  { type: 'pdf', label: 'PDF', icon: <FileText size={18} /> },
-  { type: 'speech', label: 'Speech (MP3)', icon: <Mic2 size={18} /> },
-  { type: 'podcast', label: 'Podcast (MP3)', icon: <Music size={18} /> },
+  { type: 'ppt', label: 'PowerPoint', icon: <Presentation size={14} /> },
+  { type: 'mp4', label: 'Video', icon: <Video size={14} /> },
+  { type: 'doc', label: 'Document', icon: <FileText size={14} /> },
+  { type: 'pdf', label: 'PDF Document', icon: <FileText size={14} /> },
+  { type: 'speech', label: 'Speech (MP3)', icon: <Mic2 size={14} /> },
+  { type: 'podcast', label: 'Podcast (MP3)', icon: <Music size={14} /> },
 ]
 
 interface Template {
@@ -69,6 +69,7 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
   const [isConnected, setIsConnected] = useState(false)
   const [ciscoTemplateId, setCiscoTemplateId] = useState<number | null>(null)
   const [currentChatTitle, setCurrentChatTitle] = useState<string>('')
+  const [asyncJobs, setAsyncJobs] = useState<{ [key: string]: any }>({}) // Track async generation jobs
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -544,6 +545,101 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
     )
   }
 
+  // Poll for async job status
+  const pollJobStatus = async (jobId: string, messageId: number, type: string) => {
+    const maxAttempts = 120 // 120 * 3 seconds = 6 minutes max
+    let attempts = 0
+    
+    const checkStatus = async () => {
+      try {
+        const response = await api.get(`/api/generate/job/${jobId}`)
+        const job = response.data
+        
+        console.log(`[AsyncJob] Status check for ${jobId}:`, job.status, job.progress)
+        
+        // Update async jobs state
+        setAsyncJobs(prev => ({
+          ...prev,
+          [`${messageId}-${type}`]: job
+        }))
+        
+        if (job.status === 'completed') {
+          console.log(`[AsyncJob] Job ${jobId} completed!`)
+          setGenerating(null)
+          return true
+        } else if (job.status === 'failed') {
+          console.error(`[AsyncJob] Job ${jobId} failed:`, job.error)
+          alert(`Failed to generate ${type}: ${job.error || 'Unknown error'}`)
+          setGenerating(null)
+          setAsyncJobs(prev => {
+            const newJobs = { ...prev }
+            delete newJobs[`${messageId}-${type}`]
+            return newJobs
+          })
+          return true
+        }
+        
+        // Continue polling if still processing
+        attempts++
+        if (attempts < maxAttempts) {
+          setTimeout(checkStatus, 3000) // Check every 3 seconds
+        } else {
+          console.error(`[AsyncJob] Job ${jobId} timed out after ${maxAttempts} attempts`)
+          alert(`Generation timed out. Please try again.`)
+          setGenerating(null)
+          setAsyncJobs(prev => {
+            const newJobs = { ...prev }
+            delete newJobs[`${messageId}-${type}`]
+            return newJobs
+          })
+        }
+      } catch (error: any) {
+        console.error(`[AsyncJob] Error checking job status:`, error)
+        attempts++
+        if (attempts < maxAttempts) {
+          setTimeout(checkStatus, 3000)
+        } else {
+          setGenerating(null)
+        }
+      }
+    }
+    
+    checkStatus()
+  }
+  
+  // Download completed async job
+  const downloadAsyncJob = async (jobId: string, messageId: number, type: string) => {
+    try {
+      console.log(`[AsyncJob] Downloading ${jobId}...`)
+      
+      const response = await api.get(`/api/generate/download/${jobId}`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(response.data)
+      const a = document.createElement('a')
+      a.href = url
+      const extension = 
+        type === 'ppt' ? 'pptx' : 
+        type === 'mp4' ? 'mp4' : 
+        type === 'doc' ? 'docx' : 
+        type === 'pdf' ? 'pdf' :
+        type === 'speech' ? 'mp3' :
+        type === 'podcast' ? 'mp3' :
+        'txt'
+      a.download = `generated_${type}_${Date.now()}.${extension}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      console.log(`[AsyncJob] Download triggered successfully`)
+    } catch (error: any) {
+      console.error(`[AsyncJob] Download failed:`, error)
+      alert(`Failed to download file: ${error.message}`)
+    }
+  }
+
   const generateDocument = async (messageId: number, type: string) => {
     const message = messages.find((m) => m.id === messageId)
     if (!message) return
@@ -578,6 +674,30 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
         finalTopic = message.metadata.video_generation.topic
       }
       
+      // Use ASYNC endpoint for podcast, speech, and ppt (long-running)
+      if (type === 'podcast' || type === 'speech' || type === 'ppt') {
+        console.log(`[AsyncGeneration] Requesting async ${type} generation...`)
+        
+        const response = await api.post('/api/generate/async', {
+          content: content,
+          type: type,
+          session_id: sessionId,
+          topic: finalTopic,
+          template_id: templateId,
+        })
+        
+        const jobId = response.data.job_id
+        console.log(`[AsyncGeneration] Job started with ID: ${jobId}`)
+        
+        // Start polling for status
+        pollJobStatus(jobId, messageId, type)
+        
+        return
+      }
+      
+      // For other types, use synchronous endpoint
+      console.log(`[Generation] Requesting ${type} generation...`)
+      
       const response = await api.post(
         '/api/generate/document',
         {
@@ -592,6 +712,35 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
         }
       )
 
+      console.log(`[Generation] Response received:`, {
+        status: response.status,
+        contentType: response.headers['content-type'],
+        dataType: response.data.type,
+        dataSize: response.data.size
+      })
+
+      // Check if response is actually an error (blob might contain error JSON)
+      if (response.data.type === 'application/json') {
+        // Response is JSON error, not a file
+        console.log('[Generation] Response is JSON error, parsing...')
+        const text = await response.data.text()
+        const errorData = JSON.parse(text)
+        throw new Error(errorData.detail || 'Failed to generate document')
+      }
+
+      // Check if blob is too small (might be an error)
+      if (response.data.size < 100) {
+        console.warn('[Generation] Response blob is very small, might be an error')
+        try {
+          const text = await response.data.text()
+          console.log('[Generation] Small blob content:', text)
+          throw new Error(`Invalid file received: ${text}`)
+        } catch (e) {
+          // If can't read as text, proceed with download attempt
+        }
+      }
+
+      console.log(`[Generation] Creating download for ${type}...`)
       const url = window.URL.createObjectURL(response.data)
       const a = document.createElement('a')
       a.href = url
@@ -608,6 +757,8 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
+      
+      console.log(`[Generation] ${type} download triggered successfully`)
 
       setMessages((prev) =>
         prev.map((m) =>
@@ -623,7 +774,43 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
         )
       )
     } catch (error: any) {
-      alert(`Failed to generate ${type}: ${error.response?.data?.detail || 'Unknown error'}`)
+      console.error(`[Generation] Error generating ${type}:`, error)
+      console.error(`[Generation] Error details:`, {
+        message: error.message,
+        response: error.response ? {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          headers: error.response.headers,
+          dataType: error.response.data ? (error.response.data instanceof Blob ? 'Blob' : typeof error.response.data) : 'undefined'
+        } : 'No response'
+      })
+      
+      // Handle blob error responses
+      let errorMessage = 'Unknown error'
+      if (error.response?.data instanceof Blob) {
+        console.log('[Generation] Error response is a Blob, attempting to parse...')
+        try {
+          const text = await error.response.data.text()
+          console.log('[Generation] Blob text content:', text)
+          try {
+            const errorData = JSON.parse(text)
+            errorMessage = errorData.detail || errorData.message || 'Unknown error'
+          } catch (jsonError) {
+            // Not JSON, use raw text
+            errorMessage = text || 'Failed to parse error response'
+          }
+        } catch (e) {
+          console.error('[Generation] Failed to read blob:', e)
+          errorMessage = 'Failed to read error response'
+        }
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      console.error(`[Generation] Final error message: ${errorMessage}`)
+      alert(`Failed to generate ${type}: ${errorMessage}`)
     } finally {
       setGenerating(null)
     }
@@ -648,15 +835,6 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
       <div className="border-b border-slate-700/50 bg-slate-800/30 px-6 py-4 backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            {onNewChat && (
-              <button
-                onClick={onNewChat}
-                className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors text-gray-300 hover:text-white"
-                title="New Chat"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-            )}
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center">
                 <Bot className="w-5 h-5 text-white" />
@@ -665,15 +843,15 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
                 <h2 className="text-lg font-semibold text-white">
                   GPT-4.1 (Cisco)
                 </h2>
-                <p className="text-sm text-gray-400">
-                  {currentChatTitle || 'New Chat'} • {messages.length} messages
+                <p className="text-xs text-gray-400">
+                  {currentChatTitle || 'New chat'} • {messages.length} messages
                 </p>
               </div>
             </div>
           </div>
           <div className="flex items-center space-x-2">
             <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'} ${isConnected ? 'animate-pulse' : ''}`}></div>
-            <span className="text-xs text-gray-400">{isConnected ? 'Connected' : 'Disconnected'}</span>
+            <span className="text-[10px] text-gray-500">{isConnected ? 'Connected' : 'Disconnected'}</span>
           </div>
         </div>
       </div>
@@ -683,23 +861,23 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
         {messages.length === 0 && (
           <div className="text-center text-gray-400 mt-12">
             <Bot className="mx-auto mb-4 text-cyan-400" size={48} />
-            <p className="text-lg font-medium mb-2 text-white">Welcome to AGENT</p>
-            <p className="text-sm mb-4 text-gray-400">I can help with analysis, insights, document creation, presentations, and more.</p>
-            <div className="max-w-2xl mx-auto space-y-2 text-sm">
-              <div className="bg-gray-300/10 p-3 rounded-lg border border-gray-400/15 text-gray-400">
-                "I have a client with challenges on zone based segmentation - what is my best pitch?"
+            <p className="text-base font-medium mb-2 text-white">Welcome to AGENT</p>
+            <p className="text-xs mb-4 text-gray-400">I can help with analysis, insights, document creation, presentations, and more</p>
+            <div className="max-w-2xl mx-auto space-y-2 text-xs">
+              <div className="bg-gray-300/10 p-2.5 rounded-lg border border-gray-400/15 text-gray-400">
+                "I have a client with challenges on zone based segmentation - what's my best pitch?"
               </div>
-              <div className="bg-gray-300/10 p-3 rounded-lg border border-gray-400/15 text-gray-400">
-                "Explain to me what is hybrid mesh firewall and how Cisco can help?"
+              <div className="bg-gray-300/10 p-2.5 rounded-lg border border-gray-400/15 text-gray-400">
+                "Explain to me what is hybrid mesh firewall and how cisco can help?"
               </div>
-              <div className="bg-gray-300/10 p-3 rounded-lg border border-gray-400/15 text-gray-400">
-                "Tell me about AI model protection and give me ideas to pitch it using powerpoint"
+              <div className="bg-gray-300/10 p-2.5 rounded-lg border border-gray-400/15 text-gray-400">
+                "Tell me about ai model protection and give me ideas to pitch it using powerpoint"
               </div>
-              <div className="bg-gray-300/10 p-3 rounded-lg border border-gray-400/15 text-gray-400">
-                "Please generate a demo video for SnortML"
+              <div className="bg-gray-300/10 p-2.5 rounded-lg border border-gray-400/15 text-gray-400">
+                "Please generate a demo video for snortml"
               </div>
-              <div className="bg-gray-300/10 p-3 rounded-lg border border-gray-400/15 text-gray-400">
-                "Create a podcast about AI protection use cases"
+              <div className="bg-gray-300/10 p-2.5 rounded-lg border border-gray-400/15 text-gray-400">
+                "Create a podcast about ai protection use cases"
               </div>
             </div>
           </div>
@@ -724,46 +902,107 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
               {/* Podcast Generation Button */}
               {message.role === 'assistant' && message.metadata?.podcast_generation && message.metadata.podcast_generation.ready_for_mp3 && (
                 <div className="mt-3 flex items-center gap-3">
-                  <button
-                    onClick={() => generateDocument(message.id, 'podcast')}
-                    disabled={generating?.messageId === message.id && generating?.type === 'podcast'}
-                    className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {generating?.messageId === message.id && generating?.type === 'podcast' ? (
-                      <>
-                        <Loader2 className="animate-spin" size={16} />
-                        <span>Generating MP3...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Users size={16} />
-                        <span>Generate Podcast MP3</span>
-                      </>
-                    )}
-                  </button>
+                  {(() => {
+                    const jobKey = `${message.id}-podcast`
+                    const asyncJob = asyncJobs[jobKey]
+                    
+                    if (asyncJob?.status === 'completed') {
+                      // Show download button
+                      return (
+                        <button
+                          onClick={() => downloadAsyncJob(asyncJob.job_id, message.id, 'podcast')}
+                          className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-green-500/20 to-emerald-600/20 text-green-400 border border-green-400/30 hover:from-green-500/30 hover:to-emerald-600/30 transition-all shadow-sm"
+                        >
+                          <Download size={14} />
+                          <span>Download Podcast (MP3)</span>
+                        </button>
+                      )
+                    } else if (asyncJob?.status === 'processing') {
+                      // Show progress
+                      return (
+                        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30">
+                          <Loader2 className="animate-spin" size={14} />
+                          <div className="flex flex-col items-start">
+                            <span>Generating Podcast (MP3)...</span>
+                            <span className="text-[10px] text-gray-500">{asyncJob.message} ({asyncJob.progress}%)</span>
+                          </div>
+                        </div>
+                      )
+                    } else {
+                      // Show generate button
+                      return (
+                        <button
+                          onClick={() => generateDocument(message.id, 'podcast')}
+                          disabled={generating?.messageId === message.id && generating?.type === 'podcast'}
+                          className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {generating?.messageId === message.id && generating?.type === 'podcast' ? (
+                            <>
+                              <Loader2 className="animate-spin" size={14} />
+                              <span>Starting...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Users size={14} />
+                              <span>Generate Podcast (MP3)</span>
+                            </>
+                          )}
+                        </button>
+                      )
+                    }
+                  })()}
                 </div>
               )}
 
               {/* Speech Generation Button */}
               {message.role === 'assistant' && message.metadata?.speech_generation && message.metadata.speech_generation.ready_for_mp3 && (
                 <div className="mt-3 flex items-center gap-3">
-                  <button
-                    onClick={() => generateDocument(message.id, 'speech')}
-                    disabled={generating?.messageId === message.id && generating?.type === 'speech'}
-                    className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {generating?.messageId === message.id && generating?.type === 'speech' ? (
-                      <>
-                        <Loader2 className="animate-spin" size={16} />
-                        <span>Generating MP3...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic2 size={16} />
-                        <span>Generate Speech MP3</span>
-                      </>
-                    )}
-                  </button>
+                  {(() => {
+                    const jobKey = `${message.id}-speech`
+                    const asyncJob = asyncJobs[jobKey]
+                    
+                    if (asyncJob?.status === 'completed') {
+                      return (
+                        <button
+                          onClick={() => downloadAsyncJob(asyncJob.job_id, message.id, 'speech')}
+                          className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-green-500/20 to-emerald-600/20 text-green-400 border border-green-400/30 hover:from-green-500/30 hover:to-emerald-600/30 transition-all shadow-sm"
+                        >
+                          <Download size={14} />
+                          <span>Download Speech (MP3)</span>
+                        </button>
+                      )
+                    } else if (asyncJob?.status === 'processing') {
+                      return (
+                        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30">
+                          <Loader2 className="animate-spin" size={14} />
+                          <div className="flex flex-col items-start">
+                            <span>Generating Speech (MP3)...</span>
+                            <span className="text-[10px] text-gray-500">{asyncJob.message} ({asyncJob.progress}%)</span>
+                          </div>
+                        </div>
+                      )
+                    } else {
+                      return (
+                        <button
+                          onClick={() => generateDocument(message.id, 'speech')}
+                          disabled={generating?.messageId === message.id && generating?.type === 'speech'}
+                          className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {generating?.messageId === message.id && generating?.type === 'speech' ? (
+                            <>
+                              <Loader2 className="animate-spin" size={14} />
+                              <span>Starting...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Mic2 size={14} />
+                              <span>Generate Speech (MP3)</span>
+                            </>
+                          )}
+                        </button>
+                      )
+                    }
+                  })()}
                 </div>
               )}
 
@@ -773,53 +1012,83 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
                   <button
                     onClick={() => generateDocument(message.id, 'doc')}
                     disabled={generating?.messageId === message.id && generating?.type === 'doc'}
-                    className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {generating?.messageId === message.id && generating?.type === 'doc' ? (
                       <>
-                        <Loader2 className="animate-spin" size={16} />
-                        <span>Generating Document...</span>
+                        <Loader2 className="animate-spin" size={14} />
+                        <span>Generating document...</span>
                       </>
                     ) : (
                       <>
-                        <FileText size={16} />
-                        <span>Generate Document</span>
+                        <FileText size={14} />
+                        <span>Generate document</span>
                       </>
                     )}
                   </button>
                 </div>
               )}
 
-              {/* Video Generation Button - DISABLED: Only demo videos are available */}
-              {/* Removed: Video generation via HeyGen is disabled in production */}
+              {/* Video Generation Button - Only demo videos are available */}
 
               {/* PowerPoint Generation Confirmation */}
               {message.role === 'assistant' && message.metadata?.ppt_generation && (
                 <div className="mt-3 flex items-center gap-3">
-                  <button
-                    onClick={() => confirmGeneratePPT(message.id)}
-                    disabled={generating?.messageId === message.id && generating?.type === 'ppt'}
-                    className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {generating?.messageId === message.id && generating?.type === 'ppt' ? (
-                      <>
-                        <Loader2 className="animate-spin" size={16} />
-                        <span>Generating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Presentation size={16} />
-                        <span>Yes, generate PowerPoint</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => cancelGeneratePPT(message.id)}
-                    disabled={generating?.messageId === message.id && generating?.type === 'ppt'}
-                    className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-700/50 text-gray-300 border border-slate-600/50 hover:bg-slate-700/70 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    No, continue conversation
-                  </button>
+                  {(() => {
+                    const jobKey = `${message.id}-ppt`
+                    const asyncJob = asyncJobs[jobKey]
+                    
+                    if (asyncJob?.status === 'completed') {
+                      return (
+                        <button
+                          onClick={() => downloadAsyncJob(asyncJob.job_id, message.id, 'ppt')}
+                          className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-green-500/20 to-emerald-600/20 text-green-400 border border-green-400/30 hover:from-green-500/30 hover:to-emerald-600/30 transition-all shadow-sm"
+                        >
+                          <Download size={14} />
+                          <span>Download PowerPoint</span>
+                        </button>
+                      )
+                    } else if (asyncJob?.status === 'processing') {
+                      return (
+                        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30">
+                          <Loader2 className="animate-spin" size={14} />
+                          <div className="flex flex-col items-start">
+                            <span>Generating PowerPoint...</span>
+                            <span className="text-[10px] text-gray-500">{asyncJob.message} ({asyncJob.progress}%)</span>
+                          </div>
+                        </div>
+                      )
+                    } else {
+                      return (
+                        <>
+                          <button
+                            onClick={() => generateDocument(message.id, 'ppt')}
+                            disabled={generating?.messageId === message.id && generating?.type === 'ppt'}
+                            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {generating?.messageId === message.id && generating?.type === 'ppt' ? (
+                              <>
+                                <Loader2 className="animate-spin" size={14} />
+                                <span>Starting...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Presentation size={14} />
+                                <span>Yes, Generate PowerPoint</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => cancelGeneratePPT(message.id)}
+                            disabled={generating?.messageId === message.id && generating?.type === 'ppt'}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700/50 text-gray-300 border border-slate-600/50 hover:bg-slate-700/70 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            No, continue conversation
+                          </button>
+                        </>
+                      )
+                    }
+                  })()}
                 </div>
               )}
 
@@ -835,8 +1104,8 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
                       if (option.type === 'mp4') {
                         return false
                       }
-                      // Hide "Generate Video" option if videos are already available in metadata
-                      if (option.type === 'mp4' && message.metadata?.videos && message.metadata.videos.length > 0) {
+                      // Hide speech and podcast - they have dedicated sections above
+                      if (option.type === 'speech' || option.type === 'podcast') {
                         return false
                       }
                       return message.metadata?.requested_generation?.includes(option.type)
@@ -844,13 +1113,53 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
                     .map((option) => {
                       const isGenerating = generating?.messageId === message.id && generating?.type === option.type
                       const isGenerated = message.metadata?.generated?.includes(option.type)
+                      const asyncJobKey = `${message.id}-${option.type}`
+                      const asyncJob = asyncJobs[asyncJobKey]
+                      
+                      // Show job status if it's processing or completed
+                      if (asyncJob?.status === 'processing') {
+                        return (
+                          <div key={option.type} className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-amber-500/20 to-orange-600/20 text-amber-400 border border-amber-400/30">
+                            <Loader2 className="animate-spin" size={14} />
+                            <div className="flex flex-col items-start">
+                              <span>Generating {option.label}...</span>
+                              <span className="text-[10px] text-gray-500">{asyncJob.message} ({asyncJob.progress}%)</span>
+                            </div>
+                          </div>
+                        )
+                      }
+                      
+                      if (asyncJob?.status === 'completed') {
+                        return (
+                          <button
+                            key={option.type}
+                            onClick={() => downloadAsyncJob(asyncJob.job_id, message.id, option.type)}
+                            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-green-500/20 to-emerald-600/20 text-green-400 border border-green-500/30 hover:from-green-500/30 hover:to-emerald-600/30 transition-all shadow-sm"
+                          >
+                            <Download size={14} />
+                            <span>Download {option.label.toLowerCase()}</span>
+                          </button>
+                        )
+                      }
+                      
+                      if (asyncJob?.status === 'failed') {
+                        return (
+                          <button
+                            key={option.type}
+                            onClick={() => generateDocument(message.id, option.type)}
+                            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-red-500/20 to-rose-600/20 text-red-400 border border-red-500/30 hover:from-red-500/30 hover:to-rose-600/30 transition-all shadow-sm"
+                          >
+                            <span>Retry {option.label}</span>
+                          </button>
+                        )
+                      }
                       
                       return (
                         <button
                           key={option.type}
                           onClick={() => generateDocument(message.id, option.type)}
                           disabled={isGenerating}
-                          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                          className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                             isGenerated
                               ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                               : 'bg-slate-800/70 text-gray-300 border border-slate-700/50 hover:bg-slate-700/70 hover:border-cyan-500/50 shadow-sm'
@@ -858,7 +1167,7 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
                         >
                           {isGenerating ? (
                             <>
-                              <Loader2 className="animate-spin" size={16} />
+                              <Loader2 className="animate-spin" size={14} />
                               <span>Generating...</span>
                             </>
                           ) : (
@@ -867,7 +1176,7 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
                               <span>
                                 {isGenerated ? `Download ${option.label}` : `Generate ${option.label}`}
                               </span>
-                              {isGenerated && <Download size={14} />}
+                              {isGenerated && <Download size={12} />}
                             </>
                           )}
                         </button>
@@ -886,10 +1195,10 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
                         // Open YouTube video in new tab
                         window.open(video.url, '_blank', 'noopener,noreferrer')
                       }}
-                      className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-400/30 hover:from-red-500/30 hover:to-red-600/30 transition-all shadow-sm w-fit"
+                      className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-400/30 hover:from-red-500/30 hover:to-red-600/30 transition-all shadow-sm w-fit"
                     >
-                      <Video size={16} />
-                      <span>Watch Demo Video{message.metadata.videos.length > 1 ? ` ${index + 1}` : ''}</span>
+                      <Video size={14} />
+                      <span>Watch demo video{message.metadata.videos.length > 1 ? ` ${index + 1}` : ''}</span>
                     </button>
                   ))}
                 </div>
@@ -921,10 +1230,10 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
                         alert('Failed to download PowerPoint. Please try again.')
                       }
                     }}
-                    className="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm"
+                    className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30 hover:from-cyan-500/30 hover:to-blue-600/30 transition-all shadow-sm"
                   >
-                    <Download size={16} />
-                    <span>Download PowerPoint</span>
+                    <Download size={14} />
+                    <span>Download powerpoint</span>
                   </button>
                 </div>
               )}
@@ -951,27 +1260,20 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
           }}
           className="flex space-x-3 max-w-4xl mx-auto"
         >
-          <button
-            type="button"
-            className="p-3 text-gray-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
-            title="Upload to neural database"
-          >
-            <FileText className="w-5 h-5" />
-          </button>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Hi! How can I assist you today?"
-            className="flex-1 px-4 py-3 bg-slate-800/70 border border-slate-700/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/50"
+            placeholder="Hey, what can i help you with?"
+            className="flex-1 px-4 py-3 bg-slate-800/70 border border-slate-700/50 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/50"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 font-medium shadow-lg shadow-cyan-500/30"
+            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-400 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 font-medium shadow-lg shadow-cyan-500/30 text-sm"
           >
-            <Send size={20} />
+            <Send size={18} />
             <span>Send</span>
           </button>
         </form>
@@ -980,70 +1282,70 @@ export function ChatWithGeneration({ sessionId: propSessionId, onNewChat, onSess
         <div className="flex items-center justify-center gap-2 mt-3 max-w-4xl mx-auto">
           <button
             onClick={() => setSelectedContentType(selectedContentType === 'doc' ? null : 'doc')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5 ${
               selectedContentType === 'doc'
                 ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30'
                 : 'bg-slate-800/50 text-gray-300 border border-slate-700/50 hover:bg-slate-700/50 hover:border-cyan-500/30'
             }`}
           >
-            <FileText size={16} />
+            <FileText size={14} />
             <span>Document</span>
           </button>
           <button
             onClick={() => setSelectedContentType(selectedContentType === 'ppt' ? null : 'ppt')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5 ${
               selectedContentType === 'ppt'
                 ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30'
                 : 'bg-slate-800/50 text-gray-300 border border-slate-700/50 hover:bg-slate-700/50 hover:border-cyan-500/30'
             }`}
           >
-            <Presentation size={16} />
+            <Presentation size={14} />
             <span>Presentation</span>
           </button>
           <button
             onClick={() => setSelectedContentType(selectedContentType === 'mp4' ? null : 'mp4')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5 ${
               selectedContentType === 'mp4'
                 ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30'
                 : 'bg-slate-800/50 text-gray-300 border border-slate-700/50 hover:bg-slate-700/50 hover:border-cyan-500/30'
             }`}
           >
-            <Video size={16} />
+            <Video size={14} />
             <span>Video</span>
           </button>
           <button
             onClick={() => setSelectedContentType(selectedContentType === 'podcast' ? null : 'podcast')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5 ${
               selectedContentType === 'podcast'
                 ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30'
                 : 'bg-slate-800/50 text-gray-300 border border-slate-700/50 hover:bg-slate-700/50 hover:border-cyan-500/30'
             }`}
           >
-            <Users size={16} />
+            <Users size={14} />
             <span>Podcast</span>
           </button>
           <button
             onClick={() => setSelectedContentType(selectedContentType === 'speech' ? null : 'speech')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center space-x-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5 ${
               selectedContentType === 'speech'
                 ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-400/30'
                 : 'bg-slate-800/50 text-gray-300 border border-slate-700/50 hover:bg-slate-700/50 hover:border-cyan-500/30'
             }`}
           >
-            <Mic2 size={16} />
+            <Mic2 size={14} />
             <span>Speech</span>
           </button>
         </div>
         
         {/* Disclaimer and Feedback */}
-        <div className="flex items-center justify-center gap-3 mt-2 max-w-4xl mx-auto text-xs text-gray-400">
-          <span>AGENT strives for accuracy but can be wrong. Please review results carefully.</span>
+        <div className="flex items-center justify-center gap-3 mt-2 max-w-4xl mx-auto text-[10px] text-gray-500">
+          <span>Agent can make mistakes – please review important info</span>
           <button
             onClick={() => {
               // Placeholder for feedback functionality
               console.log('Share feedback clicked')
             }}
-            className="text-cyan-400 hover:text-cyan-300 underline transition-colors"
+            className="text-cyan-400/80 hover:text-cyan-300 underline transition-colors"
           >
             Share feedback
           </button>

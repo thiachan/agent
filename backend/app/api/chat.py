@@ -107,7 +107,7 @@ def detect_agent_intent(message: str) -> Optional[Dict[str, Any]]:
                 }
             }
     
-    # Check for video mentions - always check demo videos first, then offer HeyGen if none found
+    # Check for video mentions - check for demo videos
     # Also check for phrases that indicate video generation intent (even without "video" keyword)
     video_keywords = ["video", "generate video", "create video", "make video", "produce video"]
     script_to_video_phrases = ["use that script", "use this script", "use the script", "generate from script", "create from script", "make from script"]
@@ -127,7 +127,7 @@ def detect_agent_intent(message: str) -> Optional[Dict[str, Any]]:
             "generate", "create", "make", "produce", "use that script", "use this script", "use the script"
         ]) or has_script_phrase
         
-        # Always use video_generate agent - it will check demo videos first, then HeyGen if needed
+        # Always use video_generate agent to check for demo videos
         logger.info(f"Detected video request. Topic: {topic}, Explicit generate: {explicit_generate}")
         return {
             "agent": "video_generate", 
@@ -635,7 +635,7 @@ async def send_message(
                 metadata["agent_error"] = str(e)
                 assistant_content = "No demo videos available today."
         elif agent_intent["agent"] == "video_generate":
-            # SIMPLE LOGIC: Only check for demo videos, no HeyGen generation
+            # Check for demo videos only
             try:
                 topic = agent_intent["params"].get("topic", "")
                 
