@@ -1,6 +1,6 @@
 variable "aws_region" {
   type    = string
-  default = "us-west-1"
+  default = "ap-southeast-1"
 }
 
 variable "project" {
@@ -30,7 +30,7 @@ variable "private_subnet_cidrs" {
 
 variable "availability_zones" {
   type    = list(string)
-  default = ["us-west-1a", "us-west-1c"]
+  default = ["ap-southeast-1a", "ap-southeast-1b"]
 }
 
 variable "db_name" {

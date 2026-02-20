@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION:        us-east-1
-  ECR_REGISTRY:      ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  AWS_REGION:        ap-southeast-1
+  ECR_REGISTRY:      ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com
   BACKEND_IMAGE:     agent-backend
   FRONTEND_IMAGE:    agent-frontend
   ECS_CLUSTER:       agent-prod-cluster
