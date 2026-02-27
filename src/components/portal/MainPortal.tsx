@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { useAuthStore } from '@/stores/authStore'
-import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star, Users, BookOpen, PlayCircle } from 'lucide-react'
+import { useThemeStore } from '@/stores/themeStore'
+import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star, Users, BookOpen, PlayCircle, Sun, Moon } from 'lucide-react'
 import { ChatWithGeneration } from './ChatWithGeneration'
 import { DocumentUpload } from './DocumentUpload'
 import { UserManagement } from './UserManagement'
@@ -25,6 +26,7 @@ export function MainPortal() {
   const [recentChats, setRecentChats] = useState<ChatSession[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
   const { user, logout } = useAuthStore()
+  const { theme, toggleTheme } = useThemeStore()
 
   useEffect(() => {
     fetchRecentChats()
@@ -287,6 +289,17 @@ export function MainPortal() {
               title="Logout"
             >
               <LogOut className="w-4 h-4" />
+            </button>
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 hover:bg-slate-700/50 rounded transition-colors text-gray-400 hover:text-white"
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4" />
+              ) : (
+                <Moon className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>

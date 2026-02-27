@@ -55,3 +55,9 @@ vector_db/
 *.log
 logs/
 
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.tfvars
