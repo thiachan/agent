@@ -1,5 +1,5 @@
 from app.core.database import Base, engine, SessionLocal
-from app.models import user, document, chat, knowledge_base
+from app.models import user, document, chat, knowledge_base, onboarding
 from app.models.user import User, UserRole
 from app.core.security import get_password_hash
 

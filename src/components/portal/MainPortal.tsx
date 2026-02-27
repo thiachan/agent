@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { useAuthStore } from '@/stores/authStore'
-import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star, Users } from 'lucide-react'
+import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star, Users, BookOpen, PlayCircle } from 'lucide-react'
 import { ChatWithGeneration } from './ChatWithGeneration'
 import { DocumentUpload } from './DocumentUpload'
 import { UserManagement } from './UserManagement'
+import { Onboarding } from './Onboarding'
 import api from '@/lib/api'
 
 interface ChatSession {
@@ -19,7 +20,7 @@ interface ChatSession {
 }
 
 export function MainPortal() {
-  const [activeView, setActiveView] = useState<'chat' | 'upload' | 'users'>('chat')
+  const [activeView, setActiveView] = useState<'chat' | 'upload' | 'users' | 'onboarding' | 'onboarding-sim'>('chat')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [recentChats, setRecentChats] = useState<ChatSession[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
@@ -35,6 +36,7 @@ export function MainPortal() {
       setActiveView('chat')
     }
   }, [activeView, user?.role])
+
 
   const fetchRecentChats = async () => {
     try {
@@ -169,8 +171,30 @@ export function MainPortal() {
               <MessageSquare className="w-5 h-5" />
               <span>Chat</span>
             </button>
+            <button
+              onClick={() => setActiveView('onboarding')}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
+                activeView === 'onboarding'
+                  ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-white border border-cyan-400/30'
+                  : 'text-gray-400 hover:bg-slate-700/50 hover:text-white'
+              }`}
+            >
+              <BookOpen className="w-5 h-5" />
+              <span>Onboarding</span>
+            </button>
             {user?.role === 'admin' && (
               <>
+                <button
+                  onClick={() => setActiveView('onboarding-sim')}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
+                    activeView === 'onboarding-sim'
+                      ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-white border border-amber-400/30'
+                      : 'text-gray-400 hover:bg-slate-700/50 hover:text-white'
+                  }`}
+                >
+                  <PlayCircle className="w-5 h-5" />
+                  <span>Onboard Simulation</span>
+                </button>
                 <button
                   onClick={() => setActiveView('upload')}
                   className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
@@ -308,6 +332,8 @@ export function MainPortal() {
             </div>
           </div>
         )}
+        {activeView === 'onboarding' && <Onboarding />}
+        {activeView === 'onboarding-sim' && user?.role === 'admin' && <Onboarding simulateUser={true} />}
       </div>
     </div>
   )

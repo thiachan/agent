@@ -357,3 +357,63 @@ async def delete_user(
     return {
         "message": f"User {user.email} has been deleted successfully"
     }
+
+@router.put("/users/{user_id}/role")
+async def update_user_role(
+    user_id: int,
+    role_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update a user's role - Admin only
+    Prevents admin from changing their own role
+    """
+    # Check if caller is admin
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can change user roles"
+        )
+
+    # Prevent admin from changing their own role
+    if current_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot change your own role"
+        )
+
+    new_role_str = role_data.get("role", "").lower()
+    try:
+        new_role = UserRole(new_role_str)
+    except ValueError:
+        valid = [r.value for r in UserRole]
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role. Must be one of: {', '.join(valid)}"
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    old_role = user.role.value
+    user.role = new_role
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": f"User {user.email} role changed from {old_role} to {new_role.value}",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "role": user.role.value,
+            "is_active": user.is_active,
+            "is_verified": user.is_verified,
+            "created_at": user.created_at.isoformat() if user.created_at else None
+        }
+    }

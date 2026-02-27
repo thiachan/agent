@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Users, Search, Trash2, Shield, User as UserIcon, Mail, Calendar, AlertCircle, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 
 interface UserAccount {
   id: number
@@ -15,12 +16,14 @@ interface UserAccount {
 }
 
 export function UserManagement() {
+  const { user: currentUser } = useAuthStore()
   const [users, setUsers] = useState<UserAccount[]>([])
   const [filteredUsers, setFilteredUsers] = useState<UserAccount[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [changingRole, setChangingRole] = useState<number | null>(null)
   const [selectedRole, setSelectedRole] = useState<string>('all')
 
   useEffect(() => {
@@ -80,6 +83,22 @@ export function UserManagement() {
       console.error('Failed to delete user:', err)
     } finally {
       setDeleting(null)
+    }
+  }
+
+  const changeRole = async (userId: number, newRole: string) => {
+    try {
+      setChangingRole(userId)
+      const response = await api.put(`/api/auth/users/${userId}/role`, { role: newRole })
+      setUsers(prev =>
+        prev.map(u => (u.id === userId ? { ...u, role: response.data.user.role } : u))
+      )
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.detail || 'Failed to change role'
+      alert(`Error: ${errorMessage}`)
+      console.error('Failed to change role:', err)
+    } finally {
+      setChangingRole(null)
     }
   }
 
@@ -245,14 +264,43 @@ export function UserManagement() {
                 {/* Role */}
                 <div className="md:col-span-2">
                   <p className="text-xs text-gray-400 md:hidden font-medium mb-1">Role</p>
-                  <span
-                    className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium ${getRoleColor(
-                      user.role
-                    )}`}
-                  >
-                    {getRoleIcon(user.role)}
-                    <span className="capitalize">{user.role}</span>
-                  </span>
+                  {changingRole === user.id ? (
+                    <div className="inline-flex items-center space-x-1 px-3 py-1">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                      <span className="text-xs text-gray-400">Saving...</span>
+                    </div>
+                  ) : currentUser?.id === user.id ? (
+                    <span
+                      className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}
+                      title="Cannot change your own role"
+                    >
+                      {getRoleIcon(user.role)}
+                      <span className="capitalize">{user.role}</span>
+                    </span>
+                  ) : (
+                    <select
+                      value={user.role}
+                      onChange={(e) => changeRole(user.id, e.target.value)}
+                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium cursor-pointer border focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-colors ${
+                        user.role === 'admin'
+                          ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                          : user.role === 'manager'
+                          ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                          : user.role === 'engineer'
+                          ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                          : user.role === 'hr'
+                          ? 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+                          : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                      }`}
+                      style={{ backgroundColor: 'transparent' }}
+                    >
+                      <option value="admin" className="bg-slate-800 text-red-400">Admin</option>
+                      <option value="manager" className="bg-slate-800 text-orange-400">Manager</option>
+                      <option value="engineer" className="bg-slate-800 text-blue-400">Engineer</option>
+                      <option value="hr" className="bg-slate-800 text-purple-400">HR</option>
+                      <option value="employee" className="bg-slate-800 text-gray-400">Employee</option>
+                    </select>
+                  )}
                 </div>
 
                 {/* Status */}
