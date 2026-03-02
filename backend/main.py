@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning, module="pydub")
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, documents, chat, agents, upload, generate, models, knowledge_bases, onboarding
+from app.api import auth, documents, chat, agents, upload, generate, models, knowledge_bases, onboarding, bookmarks
 from app.models import onboarding as onboarding_model  # ensure table is registered
 from app.core.config import settings
 import logging
@@ -83,6 +83,7 @@ app.include_router(generate.router, prefix="/api/generate", tags=["Generate"])
 app.include_router(models.router, prefix="/api/models", tags=["Models"])
 app.include_router(knowledge_bases.router, prefix="/api/knowledge-bases", tags=["Knowledge Bases"])
 app.include_router(onboarding.router, prefix="/api/onboarding", tags=["Onboarding"])
+app.include_router(bookmarks.router, prefix="/api/bookmarks", tags=["Bookmarks"])
 
 @app.get("/")
 async def root():

@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
-import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star, Users, BookOpen, PlayCircle, Sun, Moon } from 'lucide-react'
+import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star, Users, BookOpen, PlayCircle, Sun, Moon, Bookmark } from 'lucide-react'
 import { ChatWithGeneration } from './ChatWithGeneration'
 import { DocumentUpload } from './DocumentUpload'
 import { UserManagement } from './UserManagement'
 import { Onboarding } from './Onboarding'
+import { BookmarkPage } from './BookmarkPage'
 import api from '@/lib/api'
 
 interface ChatSession {
@@ -21,7 +22,7 @@ interface ChatSession {
 }
 
 export function MainPortal() {
-  const [activeView, setActiveView] = useState<'chat' | 'upload' | 'users' | 'onboarding' | 'onboarding-sim'>('chat')
+  const [activeView, setActiveView] = useState<'chat' | 'upload' | 'users' | 'onboarding' | 'onboarding-sim' | 'bookmarks'>('chat')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [recentChats, setRecentChats] = useState<ChatSession[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
@@ -172,6 +173,17 @@ export function MainPortal() {
             >
               <MessageSquare className="w-5 h-5" />
               <span>Chat</span>
+            </button>
+            <button
+              onClick={() => setActiveView('bookmarks')}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
+                activeView === 'bookmarks'
+                  ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-white border border-cyan-400/30'
+                  : 'text-gray-400 hover:bg-slate-700/50 hover:text-white'
+              }`}
+            >
+              <Bookmark className="w-5 h-5" />
+              <span>Bookmarks</span>
             </button>
             <button
               onClick={() => setActiveView('onboarding')}
@@ -347,6 +359,7 @@ export function MainPortal() {
         )}
         {activeView === 'onboarding' && <Onboarding />}
         {activeView === 'onboarding-sim' && user?.role === 'admin' && <Onboarding simulateUser={true} />}
+        {activeView === 'bookmarks' && <BookmarkPage />}
       </div>
     </div>
   )

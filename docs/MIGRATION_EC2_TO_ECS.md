@@ -1,4 +1,4 @@
-# EC2 → AWS ECS Auto-Scaling Migration
+cd /home/ubuntu/AGENT/infra/terraform && terraform plancd /home/ubuntu/AGENT/infra/terraform && terraform plan# EC2 → AWS ECS Auto-Scaling Migration
 ## Step-by-Step Runbook — EC2 Stays Live Throughout
 
 > **Guiding principle:** At every single step, the EC2 instance remains fully operational and serving real traffic. The ECS environment is built in parallel. The only user-facing event is a DNS record change at the very end, which takes under 60 seconds.
@@ -114,7 +114,7 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 echo "Account ID: $AWS_ACCOUNT_ID"
 
 # Create state bucket (versioned, encrypted)
-aws s3 mb s3://agent-tfstate-${AWS_ACCOUNT_ID} --region ap-southeast-1
+aws s3 mb s3://agent-tfstate-${AWS_ACCOUNT_ID} --region us-west-1
 aws s3api put-bucket-versioning \
   --bucket agent-tfstate-${AWS_ACCOUNT_ID} \
   --versioning-configuration Status=Enabled
@@ -125,7 +125,7 @@ aws dynamodb create-table \
   --attribute-definitions AttributeName=LockID,AttributeType=S \
   --key-schema AttributeName=LockID,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST \
-  --region ap-southeast-1
+  --region us-west-1
 
 echo "State infrastructure ready"
 ```
@@ -146,7 +146,7 @@ grep "bucket" versions.tf
 
 ```bash
 cat > /home/ubuntu/AGENT/infra/terraform/terraform.tfvars <<EOF
-aws_region   = "ap-southeast-1"
+aws_region   = "us-west-1"
 project      = "agent"
 environment  = "prod"
 
@@ -177,13 +177,13 @@ terraform apply     # type "yes" when prompted
 Apply complete! Resources: 62 added, 0 changed, 0 destroyed.
 
 Outputs:
-  alb_dns_name          = "agent-prod-alb-xxxx.ap-southeast-1.elb.amazonaws.com"
-  ecr_backend_url       = "123456789.dkr.ecr.ap-southeast-1.amazonaws.com/agent-prod-backend"
-  ecr_frontend_url      = "123456789.dkr.ecr.ap-southeast-1.amazonaws.com/agent-prod-frontend"
-  rds_endpoint          = "agent-prod-aurora.cluster-xxxx.ap-southeast-1.rds.amazonaws.com"
+  alb_dns_name          = "agent-prod-alb-xxxx.us-west-1.elb.amazonaws.com"
+  ecr_backend_url       = "123456789.dkr.ecr.us-west-1.amazonaws.com/agent-prod-backend"
+  ecr_frontend_url      = "123456789.dkr.ecr.us-west-1.amazonaws.com/agent-prod-frontend"
+  rds_endpoint          = "agent-prod-aurora.cluster-xxxx.us-west-1.rds.amazonaws.com"
   s3_uploads_bucket     = "agent-prod-uploads-123456789"
   s3_generated_bucket   = "agent-prod-generated-123456789"
-  secrets_manager_arn   = "arn:aws:secretsmanager:ap-southeast-1:123456789:secret:agent-prod-app-secrets-xxxx"
+  secrets_manager_arn   = "arn:aws:secretsmanager:us-west-1:123456789:secret:agent-prod-app-secrets-xxxx"
   ecs_cluster_name      = "agent-prod-cluster"
 ```
 
@@ -248,7 +248,7 @@ SECRETSEOF
 aws secretsmanager put-secret-value \
   --secret-id "$SECRETS_ARN" \
   --secret-string file:///tmp/agent-secrets.json \
-  --region ap-southeast-1
+  --region us-west-1
 
 # Clean up — never leave secrets in /tmp
 rm /tmp/agent-secrets.json
@@ -270,14 +270,14 @@ The RDS security group only allows traffic from ECS tasks by default. Temporaril
 EC2_PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
 RDS_SG_ID=$(aws ec2 describe-security-groups \
   --filters "Name=group-name,Values=agent-prod-rds-sg" \
-  --query 'SecurityGroups[0].GroupId' --output text --region ap-southeast-1)
+  --query 'SecurityGroups[0].GroupId' --output text --region us-west-1)
 
 aws ec2 authorize-security-group-ingress \
   --group-id "$RDS_SG_ID" \
   --protocol tcp \
   --port 5432 \
   --cidr "${EC2_PRIVATE_IP}/32" \
-  --region ap-southeast-1
+  --region us-west-1
 
 echo "EC2 ($EC2_PRIVATE_IP) can now reach RDS"
 ```
@@ -385,7 +385,7 @@ S3_GENERATED=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw s
 # Sync uploads
 if [ -d "/home/ubuntu/AGENT/backend/uploads" ] && [ "$(ls -A /home/ubuntu/AGENT/backend/uploads)" ]; then
   aws s3 sync /home/ubuntu/AGENT/backend/uploads/ "s3://${S3_UPLOADS}/uploads/" \
-    --region ap-southeast-1 --no-progress
+    --region us-west-1 --no-progress
   echo "✅ Uploads synced to S3"
 else
   echo "uploads/ is empty — nothing to sync"
@@ -395,7 +395,7 @@ fi
 if [ -d "/home/ubuntu/AGENT/backend/temp_generated_files" ] && [ "$(ls -A /home/ubuntu/AGENT/backend/temp_generated_files)" ]; then
   aws s3 sync /home/ubuntu/AGENT/backend/temp_generated_files/ \
     "s3://${S3_GENERATED}/temp_generated_files/" \
-    --region ap-southeast-1 --no-progress
+    --region us-west-1 --no-progress
   echo "✅ Generated files synced to S3"
 else
   echo "temp_generated_files/ is empty — nothing to sync"
@@ -481,7 +481,7 @@ psql "postgresql://agentuser:${DB_PASS}@${RDS_ENDPOINT}:5432/agentdb" \
 ```bash
 # Create EFS filesystem
 EFS_ID=$(aws efs create-file-system \
-  --region ap-southeast-1 \
+  --region us-west-1 \
   --performance-mode generalPurpose \
   --throughput-mode bursting \
   --tags Key=Name,Value=agent-prod-chromadb \
@@ -492,21 +492,21 @@ echo "EFS ID: $EFS_ID"
 SUBNET_IDS=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform \
   output -json | python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join([]))" 2>/dev/null || \
   aws ec2 describe-subnets --filters "Name=tag:Name,Values=agent-prod-private-*" \
-  --query 'Subnets[*].SubnetId' --output text --region ap-southeast-1)
+  --query 'Subnets[*].SubnetId' --output text --region us-west-1)
 
 # Create mount targets in each private subnet (ECS tasks will mount EFS here)
 for SUBNET in $SUBNET_IDS; do
   aws efs create-mount-target \
     --file-system-id "$EFS_ID" \
     --subnet-id "$SUBNET" \
-    --region ap-southeast-1
+    --region us-west-1
   echo "Mount target created in $SUBNET"
 done
 
 # Sync current ChromaDB to EFS (mount EFS on EC2 first)
 sudo apt install nfs-common -y
 sudo mkdir -p /mnt/efs-chromadb
-sudo mount -t nfs4 "${EFS_ID}.efs.ap-southeast-1.amazonaws.com:/" /mnt/efs-chromadb
+sudo mount -t nfs4 "${EFS_ID}.efs.us-west-1.amazonaws.com:/" /mnt/efs-chromadb
 sudo cp -r /home/ubuntu/AGENT/backend/vector_db/* /mnt/efs-chromadb/
 echo "✅ ChromaDB copied to EFS"
 echo "EFS_ID: $EFS_ID  ← save this for terraform.tfvars"
@@ -516,50 +516,52 @@ echo "EFS_ID: $EFS_ID  ← save this for terraform.tfvars"
 
 ---
 
-## Phase 5b — Connect to Presenton ECS Service (15 minutes)
+## Phase 5b — Connect to Presenton ECS Service (10 minutes)
 
-> EC2 still serving all traffic.
->
-> ⚠️ **CROSS-REGION NOTE**: Presenton is running on ECS in **us-west-1** (N. California). Your new ECS cluster is in **ap-southeast-1** (Singapore). This means VPC peering is cross-region — commands must target the correct region for each side. If Presenton's ALB is internet-facing, no VPC peering is needed at all (just update the URL).
+> EC2 still serving all traffic. Presenton is already running on ECS in us-west-1 — you just need a stable DNS name and network connectivity.
 
 ### Step 5b.1 — Find Presenton's stable DNS
 
 The private IP `172.31.11.64` is an EC2 instance IP, not a stable address. Find the ALB or Service Connect DNS instead:
 
 ```bash
-# List all load balancers in Presenton's region (us-west-1)
+# List all load balancers in us-west-1
 aws elbv2 describe-load-balancers --region us-west-1 \
   --query 'LoadBalancers[*].{Name:LoadBalancerName,DNS:DNSName,Scheme:Scheme,VPC:VpcId}' \
   --output table
 
-# Look for the Presenton ALB — note its DNS, Scheme (internal vs internet-facing), and VpcId
+# Look for the Presenton ALB — note its DNS and Scheme (internal vs internet-facing)
+# Also note its VpcId
 ```
 
 ### Step 5b.2 — Determine VPC relationship
 
 ```bash
-# Your new ECS VPC (in ap-southeast-1, created by Terraform)
+# Your current EC2 VPC
+CURRENT_VPC=$(curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/$(curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/)/vpc-id)
+echo "Current VPC: $CURRENT_VPC"
+
+# Your new ECS VPC (created by Terraform)
 NEW_ECS_VPC=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw vpc_id 2>/dev/null || \
   aws ec2 describe-vpcs --filters "Name=tag:Name,Values=agent-prod-vpc" \
-  --query 'Vpcs[0].VpcId' --output text --region ap-southeast-1)
-echo "New ECS VPC (ap-southeast-1): $NEW_ECS_VPC"
+  --query 'Vpcs[0].VpcId' --output text --region us-west-1)
+echo "New ECS VPC: $NEW_ECS_VPC"
 
-# Presenton VPC (from the ALB VpcId noted in Step 5b.1 above — lives in us-west-1)
+# Presenton VPC (from the ALB VpcId noted above)
 PRESENTON_VPC="vpc-XXXXXXXXX"  # fill in from Step 5b.1
 ```
 
 ### Step 5b.3 — Choose connectivity option
 
-**If Presenton ALB scheme is `internet-facing`** (simplest — most likely):
+**If Presenton ALB scheme is `internet-facing`** (simplest):
 ```bash
-# No network changes needed — Presenton's ALB is publicly reachable
-# DNS ends in .us-west-1.elb.amazonaws.com
+# Just update the URL in Secrets Manager — no network changes needed
 PRESENTON_DNS="presenton-alb-xxxx.us-west-1.elb.amazonaws.com"  # from Step 5b.1
 
-# Update the secret in ap-southeast-1 Secrets Manager
+# Update the secret
 SECRETS_ARN=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw secrets_manager_arn)
 CURRENT=$(aws secretsmanager get-secret-value --secret-id "$SECRETS_ARN" \
-  --query SecretString --output text --region ap-southeast-1)
+  --query SecretString --output text --region us-west-1)
 UPDATED=$(echo "$CURRENT" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
@@ -568,82 +570,61 @@ print(json.dumps(d))")
 aws secretsmanager put-secret-value \
   --secret-id "$SECRETS_ARN" \
   --secret-string "$UPDATED" \
-  --region ap-southeast-1
+  --region us-west-1
 echo "✅ PRESENTON_API_URL updated to http://$PRESENTON_DNS"
 ```
 
-**If Presenton ALB scheme is `internal`** (requires cross-region VPC peering):
-
-> ⚠️ Cross-region peering: requester (ap-southeast-1) creates the request, peer owner (us-west-1) accepts it. Security group cross-referencing does NOT work cross-region — use CIDR-based rules.
-
+**If Presenton ALB scheme is `internal`** (requires VPC peering):
 ```bash
-# Step A: Get ECS task CIDR (your new VPC CIDR — needed for Presenton's SG rule)
-NEW_ECS_CIDR=$(aws ec2 describe-vpcs --vpc-ids "$NEW_ECS_VPC" \
-  --query 'Vpcs[0].CidrBlock' --output text --region ap-southeast-1)
-echo "New ECS CIDR: $NEW_ECS_CIDR"
-
-# Step B: Get Presenton VPC CIDR
-PRESENTON_CIDR=$(aws ec2 describe-vpcs --vpc-ids "$PRESENTON_VPC" \
-  --query 'Vpcs[0].CidrBlock' --output text --region us-west-1)
-echo "Presenton VPC CIDR: $PRESENTON_CIDR"
-
-# Step C: Create cross-region VPC peering connection (requester side = ap-southeast-1)
+# Create VPC peering connection between your new ECS VPC and Presenton's VPC
 PEERING_ID=$(aws ec2 create-vpc-peering-connection \
   --vpc-id "$NEW_ECS_VPC" \
   --peer-vpc-id "$PRESENTON_VPC" \
-  --peer-region us-west-1 \
-  --region ap-southeast-1 \
+  --region us-west-1 \
   --query 'VpcPeeringConnection.VpcPeeringConnectionId' --output text)
 echo "Peering connection: $PEERING_ID"
 
-# Step D: Accept from the peer region (us-west-1 side — same account, different region)
+# Accept the peering request (both VPCs are in the same account/region)
 aws ec2 accept-vpc-peering-connection \
   --vpc-peering-connection-id "$PEERING_ID" \
   --region us-west-1
-echo "✅ Peering accepted"
 
-# Step E: Add route in ap-southeast-1 private route tables → Presenton's CIDR
+# Add route in your new ECS VPC route tables → Presenton VPC CIDR
+PRESENTON_CIDR=$(aws ec2 describe-vpcs --vpc-ids "$PRESENTON_VPC" \
+  --query 'Vpcs[0].CidrBlock' --output text --region us-west-1)
+
+# Get private route tables in new ECS VPC and add routes
 for RT_ID in $(aws ec2 describe-route-tables \
   --filters "Name=vpc-id,Values=$NEW_ECS_VPC" "Name=association.main,Values=false" \
-  --query 'RouteTables[*].RouteTableId' --output text --region ap-southeast-1); do
+  --query 'RouteTables[*].RouteTableId' --output text --region us-west-1); do
   aws ec2 create-route \
     --route-table-id "$RT_ID" \
     --destination-cidr-block "$PRESENTON_CIDR" \
     --vpc-peering-connection-id "$PEERING_ID" \
-    --region ap-southeast-1
-  echo "Route (ap-southeast-1) added to $RT_ID"
-done
-
-# Step F: Add return route in us-west-1 Presenton route tables → new ECS CIDR
-for RT_ID in $(aws ec2 describe-route-tables \
-  --filters "Name=vpc-id,Values=$PRESENTON_VPC" "Name=association.main,Values=false" \
-  --query 'RouteTables[*].RouteTableId' --output text --region us-west-1); do
-  aws ec2 create-route \
-    --route-table-id "$RT_ID" \
-    --destination-cidr-block "$NEW_ECS_CIDR" \
-    --vpc-peering-connection-id "$PEERING_ID" \
     --region us-west-1
-  echo "Route (us-west-1) added to $RT_ID"
+  echo "Route added to $RT_ID"
 done
 
-# Step G: Allow inbound port 80 on Presenton's SG from new ECS CIDR (us-west-1 side)
-#         Note: --source-group does NOT work cross-region; use --cidr instead
+# Allow inbound port 80 on Presenton's security group from your ECS tasks' SG
 PRESENTON_SG=$(aws ec2 describe-security-groups \
   --filters "Name=vpc-id,Values=$PRESENTON_VPC" "Name=group-name,Values=*presenton*" \
+  --query 'SecurityGroups[0].GroupId' --output text --region us-west-1)
+ECS_TASKS_SG=$(aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=$NEW_ECS_VPC" "Name=group-name,Values=*ecs-tasks*" \
   --query 'SecurityGroups[0].GroupId' --output text --region us-west-1)
 
 aws ec2 authorize-security-group-ingress \
   --group-id "$PRESENTON_SG" \
   --protocol tcp --port 80 \
-  --cidr "$NEW_ECS_CIDR" \
+  --source-group "$ECS_TASKS_SG" \
   --region us-west-1
-echo "✅ Presenton SG updated to allow port 80 from $NEW_ECS_CIDR"
+echo "✅ VPC peering and security group rules configured"
 
-# Step H: Update the secret to use Presenton's internal ALB DNS
+# Update the secret to use Presenton's internal ALB DNS
 PRESENTON_DNS="presenton-internal-alb-xxxx.us-west-1.elb.amazonaws.com"  # from Step 5b.1
 SECRETS_ARN=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw secrets_manager_arn)
 CURRENT=$(aws secretsmanager get-secret-value --secret-id "$SECRETS_ARN" \
-  --query SecretString --output text --region ap-southeast-1)
+  --query SecretString --output text --region us-west-1)
 UPDATED=$(echo "$CURRENT" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
@@ -652,24 +633,24 @@ print(json.dumps(d))")
 aws secretsmanager put-secret-value \
   --secret-id "$SECRETS_ARN" \
   --secret-string "$UPDATED" \
-  --region ap-southeast-1
+  --region us-west-1
 echo "✅ PRESENTON_API_URL updated to internal ALB"
 ```
 
-### Step 5b.4 — Test Presenton is reachable from your new ECS cluster
+### Step 5b.4 — Test Presenton is reachable from your new ECS VPC
 
 ```bash
-# Run a one-off ECS task in ap-southeast-1 to test connectivity
+# Run a one-off ECS task in your cluster to test connectivity
 ECS_CLUSTER=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw ecs_cluster_name)
-PRESENTON_DNS="presenton-alb-xxxx.us-west-1.elb.amazonaws.com"  # fill in from Step 5b.1
+PRESENTON_DNS="presenton-alb-xxxx.us-west-1.elb.amazonaws.com"  # fill in
 
-# Get a private subnet and task SG from the new ECS VPC
+# Get a subnet and SG from your ECS cluster
 SUBNET=$(aws ec2 describe-subnets \
   --filters "Name=vpc-id,Values=$NEW_ECS_VPC" "Name=tag:Name,Values=*private*" \
-  --query 'Subnets[0].SubnetId' --output text --region ap-southeast-1)
+  --query 'Subnets[0].SubnetId' --output text --region us-west-1)
 SG=$(aws ec2 describe-security-groups \
   --filters "Name=vpc-id,Values=$NEW_ECS_VPC" "Name=group-name,Values=*ecs-tasks*" \
-  --query 'SecurityGroups[0].GroupId' --output text --region ap-southeast-1)
+  --query 'SecurityGroups[0].GroupId' --output text --region us-west-1)
 
 aws ecs run-task \
   --cluster "$ECS_CLUSTER" \
@@ -677,11 +658,12 @@ aws ecs run-task \
   --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG]}" \
   --overrides "{\"containerOverrides\":[{\"name\":\"backend\",\"command\":[\"curl\",\"-sv\",\"http://$PRESENTON_DNS/health\"]}]}" \
   --task-definition agent-prod-backend \
-  --region ap-southeast-1
+  --region us-west-1
 
 # Check CloudWatch logs for the curl output (~30 seconds after)
-aws logs tail /ecs/agent-prod/backend --since 2m --region ap-southeast-1
+aws logs tail /ecs/agent-prod/backend --since 2m --region us-west-1
 ```
+
 ---
 
 ## Phase 6 — Build & Push Docker Images to ECR (30–45 minutes)
@@ -698,8 +680,8 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ALB_DNS=$(terraform -chdir=infra/terraform output -raw alb_dns_name)
 
 # Login to ECR
-aws ecr get-login-password --region ap-southeast-1 | \
-  docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.ap-southeast-1.amazonaws.com"
+aws ecr get-login-password --region us-west-1 | \
+  docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.us-west-1.amazonaws.com"
 
 SHORT_SHA=$(git rev-parse --short HEAD)
 
@@ -771,7 +753,7 @@ ALB_DNS=$(terraform -chdir=/home/ubuntu/AGENT/infra/terraform output -raw alb_dn
 aws ecs describe-services \
   --cluster "$ECS_CLUSTER" \
   --services agent-prod-backend-svc agent-prod-frontend-svc \
-  --region ap-southeast-1 \
+  --region us-west-1 \
   --query 'services[*].{Name:serviceName,Running:runningCount,Desired:desiredCount,Status:status}' \
   --output table
 
@@ -780,7 +762,7 @@ echo "Waiting for ECS services to stabilize..."
 aws ecs wait services-stable \
   --cluster "$ECS_CLUSTER" \
   --services agent-prod-backend-svc agent-prod-frontend-svc \
-  --region ap-southeast-1
+  --region us-west-1
 echo "✅ ECS services stable"
 
 # Test backend via ALB
@@ -806,10 +788,10 @@ echo "  7. Generate an MP3/podcast — should play"
 **Check CloudWatch logs if anything fails:**
 ```bash
 # Tail backend logs
-aws logs tail /ecs/agent-prod/backend --follow --region ap-southeast-1
+aws logs tail /ecs/agent-prod/backend --follow --region us-west-1
 
 # Tail frontend logs
-aws logs tail /ecs/agent-prod/frontend --follow --region ap-southeast-1
+aws logs tail /ecs/agent-prod/frontend --follow --region us-west-1
 ```
 
 ---
@@ -928,7 +910,7 @@ aws cloudwatch get-metric-statistics \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 60 \
   --statistics Sum \
-  --region ap-southeast-1
+  --region us-west-1
 ```
 
 ---
@@ -950,10 +932,10 @@ Zero data risk on rollback — EC2 and ECS both read from the same RDS + S3 afte
 **After 2 weeks of stable ECS operation:**
 ```bash
 # Stop EC2 (don't terminate yet — keep EBS snapshot)
-aws ec2 stop-instances --instance-ids YOUR_INSTANCE_ID --region ap-southeast-1
+aws ec2 stop-instances --instance-ids YOUR_INSTANCE_ID --region us-west-1
 
 # Wait 1 more week, then terminate
-aws ec2 terminate-instances --instance-ids YOUR_INSTANCE_ID --region ap-southeast-1
+aws ec2 terminate-instances --instance-ids YOUR_INSTANCE_ID --region us-west-1
 ```
 
 ---
@@ -990,8 +972,8 @@ aws ec2 terminate-instances --instance-ids YOUR_INSTANCE_ID --region ap-southeas
 aws ecs describe-tasks \
   --cluster agent-prod-cluster \
   --tasks $(aws ecs list-tasks --cluster agent-prod-cluster --desired-status STOPPED \
-    --query 'taskArns[0]' --output text --region ap-southeast-1) \
-  --region ap-southeast-1 \
+    --query 'taskArns[0]' --output text --region us-west-1) \
+  --region us-west-1 \
   --query 'tasks[0].containers[*].{name:name,reason:reason,exitCode:exitCode}'
 ```
 
