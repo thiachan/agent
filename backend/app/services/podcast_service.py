@@ -76,35 +76,44 @@ class PodcastService:
         return f"""Create an engaging, comprehensive, and natural-sounding podcast dialogue by extracting ALL key information from the content below.
 
 CRITICAL INSTRUCTIONS:
-1. **EXTRACT ALL KEY POINTS**: Extract ALL important information, features, benefits, details, examples, and insights from the content. Be thorough and comprehensive.
+1. EXTRACT ALL KEY POINTS: Extract ALL important information, features, benefits, details, examples, and insights from the content. Be thorough and comprehensive.
 
-2. **NATURAL DIALOGUE**: Create a conversation between Host and Guest that flows naturally. Use conversational language, questions, answers, and back-and-forth exchanges.
+2. NATURAL DIALOGUE: Create a conversation between Host and Guest that flows naturally. Use conversational language, questions, answers, and back-and-forth exchanges.
 
-3. **BE COMPREHENSIVE**: Include all relevant information that would be valuable to listeners. Cover numbers, statistics, specific features, benefits, use cases, and technical details.
+3. BE COMPREHENSIVE: Include all relevant information that would be valuable to listeners. Cover numbers, statistics, specific features, benefits, use cases, and technical details.
 
-4. **STRUCTURE WELL**: Organize the podcast logically with:
-   - An engaging introduction where Host introduces the topic and Guest
-   - Multiple segments covering different aspects of the topic
-   - Natural transitions between topics
-   - A strong conclusion that summarizes key takeaways
+4. STRUCTURE WELL: Organize the podcast logically with an engaging introduction where Host introduces the topic and Guest, multiple segments covering different aspects, natural transitions between topics, and a strong conclusion with key takeaways.
 
-5. **MAKE IT ENGAGING**: Use varied language, enthusiasm, questions, and natural conversational elements. Make it sound like a real podcast conversation.
+5. MAKE IT ENGAGING: Use varied language, enthusiasm, questions, and natural conversational elements. Make it sound like a real podcast conversation.
 
-6. **ACCURACY CONSTRAINT**: Only discuss facts, data, and claims that are explicitly present in the provided content. Do NOT invent statistics, fabricate quotes, or add information not found in the source material. The conversation should feel natural but every factual claim must come from the source content.
+6. ACCURACY CONSTRAINT: Only discuss facts, data, and claims that are explicitly present in the provided content. Do NOT invent statistics, fabricate quotes, or add information not found in the source material.
 
-7. **FORMAT**: Use this exact format:
-   Host: [dialogue]
-   Guest: [dialogue]
-   Host: [dialogue]
-   Guest: [dialogue]
-   (and so on...)
+7. FORMAT: Use EXACTLY this format with no other formatting:
+   Host: spoken dialogue here
+   Guest: spoken dialogue here
+   Host: spoken dialogue here
+   Guest: spoken dialogue here
 
-**TOPIC:** {topic or 'the subject matter'}
+ABSOLUTELY FORBIDDEN OUTPUT FORMATTING — THIS IS FOR AUDIO:
+- No markdown whatsoever: no bold, no italic, no underline, no headers, no bullet points, no numbered lists
+- No asterisks, no hashtags, no backticks, no code blocks
+- No brackets of any kind: no square brackets, no angle brackets, no curly braces
+- No section labels in brackets or caps
+- No URLs or hyperlinks
+- No special characters: no ampersands (say "and" instead), no less-than or greater-than signs
+- Write everything as natural flowing spoken dialogue only
+- Use commas and periods for pauses, not dashes or ellipses
+- Spell out abbreviations on first use rather than using parenthetical acronyms
+- The ONLY allowed prefix is "Host:" and "Guest:" at the start of each speaker turn
 
-**CONTENT TO LEARN FROM:**
+The output will be sent directly to a text-to-speech engine. Any formatting will be read aloud as gibberish.
+
+TOPIC: {topic or 'the subject matter'}
+
+CONTENT TO LEARN FROM:
 {content}
 
-Now create a comprehensive, engaging podcast dialogue that transforms this information into a natural conversation suitable for audio presentation."""
+Now create a comprehensive, engaging podcast dialogue. Write natural spoken dialogue only, no formatting."""
     
     async def _invoke_llm(self, llm, prompt: str):
         """Invoke LLM with this service's max_tokens configuration"""

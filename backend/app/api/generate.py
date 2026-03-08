@@ -375,12 +375,17 @@ async def download_generated_file(
     filename = job.result.get("filename", "generated_file")
     content_type = job.result.get("content_type", "application/octet-stream")
     
+    # Sanitize filename to ASCII to avoid UnicodeEncodeError in headers
+    import unicodedata, re as _re
+    safe_filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')
+    safe_filename = _re.sub(r'[^\w\s\-\.]', '_', safe_filename).strip() or "generated_file"
+    
+    from urllib.parse import quote
     return FileResponse(
         path=file_path,
         media_type=content_type,
-        filename=filename,
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
+            "Content-Disposition": f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{quote(filename)}"
         }
     )
 

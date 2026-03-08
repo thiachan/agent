@@ -76,28 +76,37 @@ class SpeechService:
         return f"""Create a compelling, comprehensive, and well-structured speech or monologue by extracting ALL key information from the content below.
 
 CRITICAL INSTRUCTIONS:
-1. **EXTRACT ALL KEY POINTS**: Dig deep and extract ALL important information, features, benefits, details, and examples from the content. Don't just summarize - include specific details.
+1. EXTRACT ALL KEY POINTS: Dig deep and extract ALL important information, features, benefits, details, and examples from the content. Do not just summarize, include specific details.
 
-2. **BE COMPREHENSIVE**: Include all relevant information that would be valuable to the audience. Extract numbers, statistics, specific features, benefits, use cases, and technical details.
+2. BE COMPREHENSIVE: Include all relevant information that would be valuable to the audience. Extract numbers, statistics, specific features, benefits, use cases, and technical details.
 
-3. **STRUCTURE WELL**: Organize the speech logically with:
-   - An engaging introduction that hooks the audience
-   - Clear main points with supporting details
-   - Compelling examples and real-world applications
-   - A strong conclusion that reinforces key takeaways
+3. STRUCTURE WELL: Organize the speech logically with an engaging introduction that hooks the audience, clear main points with supporting details, compelling examples and real-world applications, and a strong conclusion that reinforces key takeaways.
 
-4. **MAKE IT ENGAGING**: Use varied language, rhetorical devices, and enthusiasm. Make it sound like a professional speaker addressing an audience.
+4. MAKE IT ENGAGING: Use varied language, rhetorical devices, and enthusiasm. Make it sound like a professional speaker addressing an audience.
 
-5. **BE THOROUGH**: Cover ALL major topics and details from the content. Don't skip important information.
+5. BE THOROUGH: Cover ALL major topics and details from the content. Do not skip important information.
 
-6. **ACCURACY CONSTRAINT**: Only use facts, data, and claims that are explicitly present in the provided content. Do NOT invent statistics, fabricate quotes, or add information not found in the source material. If the content lacks detail on a subtopic, acknowledge that briefly rather than making something up.
+6. ACCURACY CONSTRAINT: Only use facts, data, and claims that are explicitly present in the provided content. Do NOT invent statistics, fabricate quotes, or add information not found in the source material.
 
-**TOPIC:** {topic or 'the subject matter'}
+ABSOLUTELY FORBIDDEN OUTPUT FORMATTING — THIS IS FOR AUDIO:
+- No markdown whatsoever: no bold, no italic, no underline, no headers, no bullet points, no numbered lists
+- No asterisks, no hashtags, no backticks, no code blocks
+- No brackets of any kind: no square brackets, no angle brackets, no curly braces
+- No section labels like INTRODUCTION or CONCLUSION in brackets or caps
+- No URLs or hyperlinks
+- No special characters: no ampersands (say "and" instead), no less-than or greater-than signs
+- Write everything as natural flowing spoken paragraphs only
+- Use commas and periods for pauses, not dashes or ellipses
+- Spell out abbreviations on first use rather than using parenthetical acronyms
 
-**CONTENT TO LEARN FROM:**
+The output will be sent directly to a text-to-speech engine. Any formatting will be read aloud as gibberish.
+
+TOPIC: {topic or 'the subject matter'}
+
+CONTENT TO LEARN FROM:
 {content}
 
-Now create a comprehensive, engaging speech that transforms this information into a compelling monologue suitable for presentation."""
+Now create a comprehensive, engaging speech that transforms this information into a compelling monologue suitable for audio presentation. Write in natural flowing paragraphs only."""
     
     async def _invoke_llm(self, llm, prompt: str):
         """Invoke LLM with this service's max_tokens configuration"""
