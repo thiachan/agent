@@ -1,0 +1,77 @@
+---
+# AWS ALB Ingress — the AWS Load Balancer Controller watches this resource
+# and provisions a real Application Load Balancer in ca-central-1.
+#
+# Before applying:
+#   Replace ACM_CERTIFICATE_ARN with your cert ARN from:
+#     aws acm list-certificates --region ca-central-1
+#   If you don't have a domain yet, remove the certificate-arn annotation
+#   and the ssl-redirect annotation — the ALB will serve HTTP only.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-ingress
+  namespace: agent
+  annotations:
+    # Provision an internet-facing ALB
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # Route traffic to pod IP directly (required for Fargate; good practice on EC2 nodes too)
+    alb.ingress.kubernetes.io/target-type: ip
+    # Listen on both 80 (redirected to 443) and 443
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # TLS certificate — set to your ACM cert ARN; leave empty string to skip HTTPS
+    alb.ingress.kubernetes.io/certificate-arn: "ACM_CERTIFICATE_ARN"
+    # Share one ALB across all ingresses in the agent namespace
+    alb.ingress.kubernetes.io/group.name: agent
+    # Health check for backend target group
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+    # Connection draining
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
+    # Enable access logs (optional, replace bucket name from terraform output)
+    # alb.ingress.kubernetes.io/load-balancer-attributes: access_logs.s3.enabled=true,access_logs.s3.bucket=YOUR_BUCKET
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          # API and docs → backend service
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          # Everything else → frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000

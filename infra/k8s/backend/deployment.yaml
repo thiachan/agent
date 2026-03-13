@@ -1,0 +1,138 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: agent
+  labels:
+    app: backend
+spec:
+  # Desired replica count is managed by HPA — do not set replicas here
+  # so HPA is always authoritative.
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # zero-downtime: never kill a pod before a new one is ready
+      maxSurge: 1
+
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      serviceAccountName: backend
+
+      # ChromaDB uses an EBS PVC (ReadWriteOnce = single AZ only).
+      # All backend pods MUST run in the same AZ as the EBS volume.
+      # WaitForFirstConsumer storage class picks the AZ on first bind.
+      # Once the PVC is bound to an AZ, pin pods to that AZ:
+      affinity:
+        nodeAffinity:
+          # Prefer spot nodes for cost savings
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 60
+              preference:
+                matchExpressions:
+                  - key: "node/type"
+                    operator: In
+                    values: ["spot"]
+          # Hard requirement: stay in the AZ where the EBS volume was provisioned
+          # Update this after first terraform apply:
+          #   kubectl get pvc chroma-vector-db -n agent -o jsonpath='{.metadata.annotations.volume\.kubernetes\.io/selected-node}'
+          # then set: topology.kubernetes.io/zone In [ca-central-1a]  (or 1b)
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/zone
+                    operator: In
+                    values: ["ca-central-1a", "ca-central-1b"]
+
+      # Tolerate spot taint so pods can land on spot nodes
+      tolerations:
+        - key: "spot"
+          operator: "Equal"
+          value: "true"
+          effect: "PreferNoSchedule"
+
+      # Graceful shutdown — uvicorn handles SIGTERM
+      terminationGracePeriodSeconds: 60
+
+      containers:
+        - name: backend
+          # IMAGE is replaced by CI/CD: ACCOUNT.dkr.ecr.ca-central-1.amazonaws.com/agent-prod-ca-backend:SHA
+          image: BACKEND_IMAGE_PLACEHOLDER
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2048Mi"
+
+          # All secrets injected from the k8s Secret created by ExternalSecret
+          envFrom:
+            - secretRef:
+                name: app-secrets
+
+          # Additional non-secret env vars
+          env:
+            - name: STORAGE_BACKEND
+              value: "s3"
+            - name: AWS_REGION
+              value: "ca-central-1"
+            - name: S3_UPLOADS_BUCKET
+              # Replace with value from: terraform output s3_uploads_bucket
+              value: "S3_UPLOADS_BUCKET_PLACEHOLDER"
+            - name: S3_GENERATED_BUCKET
+              # Replace with value from: terraform output s3_generated_bucket
+              value: "S3_GENERATED_BUCKET_PLACEHOLDER"
+            - name: ANONYMIZED_TELEMETRY
+              value: "False"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+
+          # Liveness: restart pod if app is hung
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+
+          # Readiness: don't route traffic until the app is up
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Startup: give the app time to load models/vector DB on cold start
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12   # 2 minutes max startup time
+
+          volumeMounts:
+            - name: chroma-vector-db
+              mountPath: /app/vector_db
+
+      volumes:
+        - name: chroma-vector-db
+          persistentVolumeClaim:
+            claimName: chroma-vector-db

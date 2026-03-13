@@ -1,0 +1,24 @@
+---
+# PersistentVolumeClaim for ChromaDB vector store.
+# Backed by an EBS gp3 volume (provisioned by the aws-ebs-csi-driver).
+# This survives pod restarts and redeployments — data is NOT lost on rolling updates.
+#
+# EBS is single-AZ: the PVC is pinned to the AZ where it was created.
+# The backend Deployment's affinity/topologySpread settings may conflict.
+# To avoid scheduling issues, the backend is constrained to one AZ via the
+# nodeAffinity in deployment.yaml when this PVC is used.
+#
+# If you want multi-AZ redundancy for ChromaDB in the future, migrate to
+# a managed vector DB (e.g., Pinecone, Weaviate, or OpenSearch Serverless).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chroma-vector-db
+  namespace: agent
+spec:
+  accessModes:
+    - ReadWriteOnce    # EBS only supports single-node read/write
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 20Gi

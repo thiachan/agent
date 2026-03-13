@@ -1,0 +1,179 @@
+name: Build → ECR → Deploy to EKS (ca-central-1)
+
+# Runs in PARALLEL with deploy.yml (us-west-1 EC2 stays untouched).
+# Every push to main deploys to BOTH environments simultaneously.
+# After you validate ca-central-1 and do the DNS cutover, disable deploy.yml.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_deploy:
+        description: "Build images only, skip kubectl deploy"
+        required: false
+        default: "false"
+
+env:
+  AWS_REGION:      ca-central-1
+  CLUSTER_NAME:    agent-prod-ca
+  K8S_NAMESPACE:   agent
+
+concurrency:
+  group: deploy-ca-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. Build backend ─────────────────────────────────────────────────────────
+  build-backend:
+    name: Build & Push Backend → ECR ca-central-1
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (ca-central-1)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID_CA }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_CA }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend
+        id: push
+        env:
+          ECR_BACKEND: ${{ secrets.ECR_BACKEND_CA }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          docker build \
+            --file backend/Dockerfile \
+            --tag "${ECR_BACKEND}:${SHORT_SHA}" \
+            --tag "${ECR_BACKEND}:latest" \
+            --cache-from "${ECR_BACKEND}:latest" \
+            ./backend
+          docker push "${ECR_BACKEND}:${SHORT_SHA}"
+          docker push "${ECR_BACKEND}:latest"
+          echo "image=${ECR_BACKEND}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+  # ── 2. Build frontend ────────────────────────────────────────────────────────
+  build-frontend:
+    name: Build & Push Frontend → ECR ca-central-1
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (ca-central-1)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID_CA }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_CA }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push frontend
+        id: push
+        env:
+          ECR_FRONTEND: ${{ secrets.ECR_FRONTEND_CA }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA::8}"
+          docker build \
+            --file Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL="${{ secrets.NEXT_PUBLIC_API_URL_CA }}" \
+            --build-arg NEXT_BUILD_STANDALONE=true \
+            --tag "${ECR_FRONTEND}:${SHORT_SHA}" \
+            --tag "${ECR_FRONTEND}:latest" \
+            --cache-from "${ECR_FRONTEND}:latest" \
+            .
+          docker push "${ECR_FRONTEND}:${SHORT_SHA}"
+          docker push "${ECR_FRONTEND}:latest"
+          echo "image=${ECR_FRONTEND}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+  # ── 3. Deploy to EKS ─────────────────────────────────────────────────────────
+  deploy:
+    name: Rolling deploy → EKS ca-central-1
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    environment: production-ca
+    if: ${{ github.event.inputs.skip_deploy != 'true' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (ca-central-1)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID_CA }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_CA }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.30.0"
+
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ env.CLUSTER_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+      # ── Backend rolling update ─────────────────────────────────────────────
+      - name: Deploy backend
+        run: |
+          kubectl set image deployment/backend \
+            backend=${{ needs.build-backend.outputs.image }} \
+            -n ${{ env.K8S_NAMESPACE }}
+          kubectl rollout status deployment/backend \
+            -n ${{ env.K8S_NAMESPACE }} \
+            --timeout=300s
+        # If rollout fails, Kubernetes keeps the old pods running (maxUnavailable=0)
+        # We explicitly undo just in case CI exits mid-rollout:
+        # kubectl rollout undo deployment/backend -n agent
+
+      # ── Frontend rolling update ────────────────────────────────────────────
+      - name: Deploy frontend
+        run: |
+          kubectl set image deployment/frontend \
+            frontend=${{ needs.build-frontend.outputs.image }} \
+            -n ${{ env.K8S_NAMESPACE }}
+          kubectl rollout status deployment/frontend \
+            -n ${{ env.K8S_NAMESPACE }} \
+            --timeout=300s
+
+      # ── Smoke test ────────────────────────────────────────────────────────
+      - name: Smoke test
+        run: |
+          ALB=$(kubectl get ingress agent-ingress -n ${{ env.K8S_NAMESPACE }} \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          if [[ -z "$ALB" ]]; then
+            echo "⚠️  ALB hostname not yet assigned — skipping smoke test"
+            exit 0
+          fi
+          echo "ALB: $ALB"
+          for i in {1..8}; do
+            STATUS=$(curl -sSo /dev/null -w "%{http_code}" "http://${ALB}/health" || echo "000")
+            [[ "$STATUS" == "200" ]] && { echo "✅ Backend healthy (HTTP $STATUS)"; exit 0; }
+            echo "Attempt $i: HTTP $STATUS — waiting 15s..."
+            sleep 15
+          done
+          echo "❌ Smoke test failed after 2 minutes" && exit 1
+
+      # ── Annotate deployment (visible in k8s events + Datadog/etc) ─────────
+      - name: Annotate deployment
+        if: always()
+        run: |
+          kubectl annotate deployment/backend \
+            kubernetes.io/change-cause="SHA=${{ github.sha }} Actor=${{ github.actor }}" \
+            -n ${{ env.K8S_NAMESPACE }} --overwrite || true
+          kubectl annotate deployment/frontend \
+            kubernetes.io/change-cause="SHA=${{ github.sha }} Actor=${{ github.actor }}" \
+            -n ${{ env.K8S_NAMESPACE }} --overwrite || true
