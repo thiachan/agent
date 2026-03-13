@@ -18,6 +18,9 @@ module "eks" {
   # cluster-admin so it can manage add-ons, Helm charts, and manifests.
   enable_cluster_creator_admin_permissions = true
 
+  # Log group already exists from a previous partial run — don't try to create it
+  create_cloudwatch_log_group = false
+
   vpc_id     = aws_vpc.main.id
   subnet_ids = aws_subnet.private[*].id
 

@@ -2,6 +2,13 @@
 # Serverless v2 scales ACUs (Aurora Capacity Units) from 0.5 to 8 automatically;
 # you pay per-second for what you use.
 
+# Auto-select the latest Aurora PostgreSQL 15 version available in this region.
+# Avoids hardcoding patch versions that differ between regions.
+data "aws_rds_engine_version" "postgresql" {
+  engine             = "aurora-postgresql"
+  preferred_versions = ["17.4", "17.3", "17.2", "16.4", "16.3", "15.6", "15.5"]
+}
+
 resource "aws_db_subnet_group" "main" {
   name       = "${local.name}-db-subnet-group"
   subnet_ids = aws_subnet.private[*].id
@@ -35,7 +42,7 @@ resource "aws_rds_cluster" "main" {
   cluster_identifier        = "${local.name}-aurora"
   engine                    = "aurora-postgresql"
   engine_mode               = "provisioned"
-  engine_version            = "15.4"
+  engine_version            = data.aws_rds_engine_version.postgresql.version
   database_name             = var.db_name
   master_username           = var.db_username
   master_password           = var.db_password
