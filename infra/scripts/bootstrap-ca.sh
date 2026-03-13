@@ -158,6 +158,14 @@ helm upgrade --install external-secrets external-secrets/external-secrets \
   --wait
 success "External Secrets Operator installed."
 
+# Wait for ESO CRDs to be fully registered before applying ClusterSecretStore
+info "Waiting for External Secrets CRDs to be ready..."
+kubectl wait --for condition=established \
+  crd/clustersecretstores.external-secrets.io \
+  crd/externalsecrets.external-secrets.io \
+  --timeout=60s
+success "ESO CRDs ready."
+
 # ── Step 9: apply k8s manifests ───────────────────────────────────────────────
 info "Applying Kubernetes manifests..."
 

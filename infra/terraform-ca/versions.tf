@@ -11,7 +11,7 @@ terraform {
   # Run infra/scripts/bootstrap-ca.sh — it creates the state bucket and lock
   # table in ca-central-1, then calls terraform init automatically.
   backend "s3" {
-    bucket         = "agent-tfstate-ca-ACCOUNT_ID"   # replaced by bootstrap-ca.sh
+    bucket         = "agent-tfstate-ca-978027421922"   # replaced by bootstrap-ca.sh
     key            = "prod-ca/terraform.tfstate"
     region         = "ca-central-1"
     dynamodb_table = "agent-tfstate-lock-ca"
