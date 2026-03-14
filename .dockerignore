@@ -13,3 +13,4 @@ docs/
 *.sh
 *.md
 infra/
+backend/

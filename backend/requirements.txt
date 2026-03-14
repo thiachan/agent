@@ -8,8 +8,8 @@ sqlalchemy==2.0.23
 psycopg2-binary>=2.9.9  # PostgreSQL adapter (optional, for PostgreSQL support)
 
 # Validation and Security
-pydantic==2.5.2
-pydantic-settings==2.1.0
+pydantic>=2.7.4,<3.0.0
+pydantic-settings>=2.1.0
 email-validator>=2.1.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
@@ -18,10 +18,11 @@ passlib[bcrypt]==1.7.4
 python-dotenv==1.0.0
 
 # AI and LLM
-langchain==0.1.0
-langchain-openai==0.0.2
-langchain-aws==0.1.0
-langchain-community==0.0.20
+langchain>=0.3.0,<0.4.0
+langchain-text-splitters>=0.3.0,<0.4.0
+langchain-openai>=0.2.0,<0.3.0
+langchain-aws>=0.2.0,<0.3.0
+langchain-community>=0.3.0,<0.4.0
 openai>=1.0.0
 sentence-transformers==2.2.2
 numpy>=1.24.0
@@ -39,7 +40,7 @@ pillow>=10.0.0
 
 # Audio Processing
 pydub==0.25.1
-moviepy==1.0.3
+moviepy>=2.0.0,<3.0
 openai-whisper
 gtts==2.5.1
 

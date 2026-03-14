@@ -15,6 +15,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
+# Disable AWS CLI v2 pager — prevents interactive "press Q to continue" prompts
+export AWS_PAGER=""
+
 REGION="ca-central-1"
 PROJECT="agent"
 ENV="prod"
@@ -136,6 +139,12 @@ success "Cluster Autoscaler installed."
 
 # ── Step 7: install AWS Load Balancer Controller ──────────────────────────────
 info "Installing AWS Load Balancer Controller..."
+VPC_ID=$(aws eks describe-cluster \
+  --name "$CLUSTER_NAME" \
+  --region "$REGION" \
+  --query "cluster.resourcesVpcConfig.vpcId" \
+  --output text)
+info "VPC ID: $VPC_ID"
 helm repo add eks https://aws.github.io/eks-charts --force-update
 helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
   --namespace kube-system \
@@ -144,8 +153,12 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
   --set serviceAccount.name=aws-load-balancer-controller \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$LBC_ROLE" \
   --set region="$REGION" \
-  --set vpcId="$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" --query 'cluster.resourcesVpcConfig.vpcId' --output text)" \
+  --set vpcId="$VPC_ID" \
   --wait
+# Wait for LBC webhook to be fully ready with a valid cert before applying
+# Services — a stale cert from a prior install causes x509 webhook failures.
+kubectl rollout status deployment/aws-load-balancer-controller \
+  -n kube-system --timeout=120s
 success "AWS Load Balancer Controller installed."
 
 # ── Step 8: install External Secrets Operator ─────────────────────────────────
@@ -166,11 +179,30 @@ kubectl wait --for condition=established \
   --timeout=60s
 success "ESO CRDs ready."
 
+# Clear kubectl discovery cache so it picks up the newly registered CRD types.
+# Without this, kubectl apply fails with "resource mapping not found" even
+# though the CRDs are fully established.
+rm -rf "${HOME}/.kube/cache/discovery/" "${HOME}/.kube/http-cache/"
+info "kubectl discovery cache cleared."
+
 # ── Step 9: apply k8s manifests ───────────────────────────────────────────────
 info "Applying Kubernetes manifests..."
 
 kubectl apply -f "$K8S_DIR/namespace.yaml"
-kubectl apply -f "$K8S_DIR/external-secrets/cluster-secret-store.yaml"
+
+# Retry ClusterSecretStore apply — kubectl's internal REST mapper can lag
+# even after the CRD is fully established and api-resources reports it ready.
+# Clear the discovery cache on every attempt so kubectl re-fetches from the
+# API server rather than reusing a stale snapshot from earlier in this script.
+info "Applying ClusterSecretStore (retrying until API is fully served)..."
+for i in $(seq 1 12); do
+  rm -rf "${HOME}/.kube/cache/discovery/" "${HOME}/.kube/http-cache/"
+  kubectl apply -f "$K8S_DIR/external-secrets/cluster-secret-store.yaml" \
+    && { success "ClusterSecretStore applied."; break; }
+  [[ $i -eq 12 ]] && die "Timed out applying ClusterSecretStore."
+  info "  attempt $i/12 — retrying in 5s..."
+  sleep 5
+done
 
 # StorageClass must exist before the PVC is created
 kubectl apply -f "$K8S_DIR/storage-class.yaml"

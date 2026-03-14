@@ -59,6 +59,18 @@ module "eks" {
       instance_types = ["m5.large", "m5a.large"]
       capacity_type  = "ON_DEMAND"
 
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 50
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+          }
+        }
+      }
+
       labels = {
         "node/type" = "on-demand"
       }
@@ -79,6 +91,18 @@ module "eks" {
       # Multiple instance types → Spot reduces interruption risk
       instance_types = ["m5.large", "m5a.large", "m6i.large", "m5.xlarge", "m5a.xlarge"]
       capacity_type  = "SPOT"
+
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 50
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+          }
+        }
+      }
 
       labels = {
         "node/type" = "spot"
