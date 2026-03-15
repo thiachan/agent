@@ -3,14 +3,22 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { api } from '@/lib/api'
-import { Check, ExternalLink, Lightbulb, Lock, Pencil, Plus, Trophy, X } from 'lucide-react'
+import { Check, ChevronDown, ExternalLink, Lightbulb, Lock, Pencil, Plus, Trophy, X } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+interface LearnMoreItem {
+  id: string
+  type: 'link' | 'text'
+  label: string
+  url?: string
+}
+
 interface Task {
   id: string
   category: string   // displayed as title
   module: string     // displayed as description
   url?: string
+  learnMore?: LearnMoreItem[]
   duration?: string
   deliverable?: string
   signOff?: string
@@ -62,6 +70,13 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean })
   const [editPageVal, setEditPageVal] = useState('')
   const [editTipIdx, setEditTipIdx] = useState<number | null>(null)
   const [editTipVal, setEditTipVal] = useState('')
+
+  // ── Learn More expand / edit state ──
+  const [expandedLM, setExpandedLM] = useState<Set<string>>(new Set())
+  const [lmEdit, setLmEdit] = useState<{
+    pId: string; taskId: string; itemId: string | null
+    type: 'link' | 'text'; label: string; url: string
+  } | null>(null)
 
   // ── Celebration ──
   const [fireworks, setFireworks] = useState(false)
@@ -149,6 +164,31 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean })
       p.id !== pId ? p : { ...p, rows: p.rows.filter(r => r.id !== tId) }
     )
     setPhases(upd); savePhases(upd)
+  }
+
+  // ── Learn More helpers ──
+  const toggleLM = (taskId: string) =>
+    setExpandedLM(prev => { const s = new Set(prev); s.has(taskId) ? s.delete(taskId) : s.add(taskId); return s })
+
+  const saveLMItems = (pId: string, taskId: string, items: LearnMoreItem[]) => {
+    const upd = phases.map(p =>
+      p.id !== pId ? p : { ...p, rows: p.rows.map(r => r.id !== taskId ? r : { ...r, learnMore: items }) }
+    )
+    setPhases(upd); savePhases(upd)
+  }
+
+  const commitLMEdit = (pId: string) => {
+    if (!lmEdit) return
+    const currentItems = phases.find(p => p.id === pId)?.rows.find(r => r.id === lmEdit.taskId)?.learnMore || []
+    let updated: LearnMoreItem[]
+    if (lmEdit.itemId === null) {
+      if (!lmEdit.label.trim()) { setLmEdit(null); return }
+      updated = [...currentItems, { id: rnd(), type: lmEdit.type, label: lmEdit.label.trim(), ...(lmEdit.type === 'link' && lmEdit.url.trim() ? { url: lmEdit.url.trim() } : {}) }]
+    } else {
+      updated = currentItems.map(i => i.id !== lmEdit.itemId ? i : { ...i, label: lmEdit.label, ...(lmEdit.type === 'link' ? { url: lmEdit.url || undefined } : { url: undefined }) })
+    }
+    saveLMItems(pId, lmEdit.taskId, updated)
+    setLmEdit(null)
   }
 
   // ── Phase header editing ──
@@ -427,7 +467,6 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean })
                     const isDone = !!checked[task.id]
                     const isEditingTitle = editTask?.pId === phase.id && editTask.tId === task.id && editTask.field === 'category'
                     const isEditingDesc = editTask?.pId === phase.id && editTask.tId === task.id && editTask.field === 'module'
-                    const isEditingUrl = editTask?.pId === phase.id && editTask.tId === task.id && editTask.field === 'url'
 
                     const card = (
                       <div className={`bg-slate-800/70 border rounded-xl p-4 transition-all duration-300 ${isDone ? 'border-green-500/30 bg-green-900/10' : 'border-slate-700/50 hover:border-slate-600/70'}`}>
@@ -465,41 +504,36 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean })
                           </p>
                         )}
 
-                        {/* URL edit field (admin) */}
-                        {isAdmin && isEditingUrl && (
-                          <div className="mb-3">
-                            <input autoFocus placeholder="https://..." className="w-full bg-slate-700 text-slate-300 text-xs border border-cyan-400/50 rounded px-2 py-1 focus:outline-none" value={editVal} onChange={e => setEditVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') commitTaskEdit(); if (e.key === 'Escape') setEditTask(null) }} />
-                            <div className="flex gap-1 mt-0.5">
-                              <button onClick={commitTaskEdit} className="p-0.5 text-green-400 hover:bg-green-500/20 rounded"><Check className="w-3 h-3" /></button>
-                              <button onClick={() => setEditTask(null)} className="p-0.5 text-red-400 hover:bg-red-500/20 rounded"><X className="w-3 h-3" /></button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Action buttons */}
+                        {/* ── Action row ── */}
                         <div className="flex items-center gap-2 flex-wrap">
-                          {task.url ? (
-                            <a
-                              href={task.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors"
-                            >
-                              <ExternalLink className="w-3 h-3" /> Learn More
-                            </a>
-                          ) : isAdmin && !isEditingUrl ? (
-                            <button
-                              onClick={() => startTaskEdit(phase.id, task.id, 'url', task.url || '')}
-                              title="Click to set a URL for Learn More"
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/40 hover:bg-blue-600 text-blue-200 hover:text-white text-xs font-semibold rounded-lg transition-colors border border-dashed border-blue-500/50"
-                            >
-                              <ExternalLink className="w-3 h-3" /> Learn More
-                            </button>
-                          ) : (
-                            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 text-slate-500 text-xs font-semibold rounded-lg cursor-default border border-slate-700">
-                              <ExternalLink className="w-3 h-3" /> Learn More
-                            </span>
-                          )}
+                          {/* Learn More toggle */}
+                          {(() => {
+                            const lmItems = task.learnMore || []
+                            const hasContent = lmItems.length > 0 || !!task.url
+                            const isOpen = expandedLM.has(task.id)
+                            if (!hasContent && !isAdmin) {
+                              return (
+                                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 text-slate-500 text-xs font-semibold rounded-lg cursor-default border border-slate-700">
+                                  Learn More
+                                </span>
+                              )
+                            }
+                            return (
+                              <button
+                                onClick={() => toggleLM(task.id)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors border ${
+                                  isOpen
+                                    ? 'bg-blue-600 text-white border-blue-500'
+                                    : hasContent
+                                    ? 'bg-blue-600/20 text-blue-300 border-blue-500/40 hover:bg-blue-600/40'
+                                    : 'bg-blue-600/10 text-blue-400/60 border-dashed border-blue-500/30 hover:bg-blue-600/20 hover:text-blue-300'
+                                }`}
+                              >
+                                Learn More
+                                <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                              </button>
+                            )
+                          })()}
 
                           <button
                             onClick={() => toggle(task.id)}
@@ -535,6 +569,91 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean })
                             </>
                           )}
                         </div>
+
+                        {/* ── Learn More expandable panel ── */}
+                        {expandedLM.has(task.id) && (
+                          <div className="mt-3 pt-3 border-t border-slate-700/50">
+                            <ul className="space-y-2 mb-2">
+                              {/* Legacy single-url backward compat */}
+                              {(!task.learnMore || task.learnMore.length === 0) && task.url && (
+                                <li className="flex items-start gap-2">
+                                  <a href={task.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+                                    <ExternalLink className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                                    <span className="break-words">{task.url}</span>
+                                  </a>
+                                </li>
+                              )}
+                              {(task.learnMore || []).map(item => {
+                                const isEditingItem = lmEdit?.taskId === task.id && lmEdit.itemId === item.id
+                                if (isEditingItem) {
+                                  return (
+                                    <li key={item.id} className="bg-slate-700/50 rounded-lg p-2">
+                                      <div className="flex flex-col gap-1.5">
+                                        <input autoFocus placeholder="Label / Text" className="w-full bg-slate-700 text-white text-xs border border-cyan-400/50 rounded px-2 py-1 focus:outline-none" value={lmEdit.label} onChange={e => setLmEdit({ ...lmEdit, label: e.target.value })} onKeyDown={e => { if (e.key === 'Escape') setLmEdit(null) }} />
+                                        {lmEdit.type === 'link' && (
+                                          <input placeholder="https://..." className="w-full bg-slate-700 text-slate-300 text-xs border border-cyan-400/50 rounded px-2 py-1 focus:outline-none" value={lmEdit.url} onChange={e => setLmEdit({ ...lmEdit, url: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') commitLMEdit(phase.id); if (e.key === 'Escape') setLmEdit(null) }} />
+                                        )}
+                                        <div className="flex gap-1">
+                                          <button onClick={() => commitLMEdit(phase.id)} className="p-0.5 text-green-400 hover:bg-green-500/20 rounded"><Check className="w-3 h-3" /></button>
+                                          <button onClick={() => setLmEdit(null)} className="p-0.5 text-red-400 hover:bg-red-500/20 rounded"><X className="w-3 h-3" /></button>
+                                        </div>
+                                      </div>
+                                    </li>
+                                  )
+                                }
+                                return (
+                                  <li key={item.id} className="flex items-start gap-2 group/lmi">
+                                    {item.type === 'link' && item.url ? (
+                                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors flex-1 min-w-0">
+                                        <ExternalLink className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                                        <span className="break-words">{item.label || item.url}</span>
+                                      </a>
+                                    ) : (
+                                      <span className="flex items-start gap-1.5 text-xs text-slate-300 flex-1 min-w-0">
+                                        <span className="text-slate-500 flex-shrink-0 mt-0.5">•</span>
+                                        <span className="break-words">{item.label}</span>
+                                      </span>
+                                    )}
+                                    {isAdmin && (
+                                      <div className="flex gap-0.5 opacity-0 group-hover/lmi:opacity-100 transition-opacity flex-shrink-0">
+                                        <button onClick={() => setLmEdit({ pId: phase.id, taskId: task.id, itemId: item.id, type: item.type, label: item.label, url: item.url || '' })} className="p-0.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded"><Pencil className="w-3 h-3" /></button>
+                                        <button onClick={() => saveLMItems(phase.id, task.id, (task.learnMore || []).filter(i => i.id !== item.id))} className="p-0.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded"><X className="w-3 h-3" /></button>
+                                      </div>
+                                    )}
+                                  </li>
+                                )
+                              })}
+                            </ul>
+
+                            {/* New item form */}
+                            {isAdmin && lmEdit?.taskId === task.id && lmEdit.itemId === null && (
+                              <div className="bg-slate-700/50 rounded-lg p-2 mb-2">
+                                <div className="flex flex-col gap-1.5">
+                                  <input autoFocus placeholder={lmEdit.type === 'link' ? 'Link label...' : 'Instruction text...'} className="w-full bg-slate-700 text-white text-xs border border-cyan-400/50 rounded px-2 py-1 focus:outline-none" value={lmEdit.label} onChange={e => setLmEdit({ ...lmEdit, label: e.target.value })} onKeyDown={e => { if (e.key === 'Escape') setLmEdit(null) }} />
+                                  {lmEdit.type === 'link' && (
+                                    <input placeholder="https://..." className="w-full bg-slate-700 text-slate-300 text-xs border border-cyan-400/50 rounded px-2 py-1 focus:outline-none" value={lmEdit.url} onChange={e => setLmEdit({ ...lmEdit, url: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') commitLMEdit(phase.id); if (e.key === 'Escape') setLmEdit(null) }} />
+                                  )}
+                                  <div className="flex gap-1">
+                                    <button onClick={() => commitLMEdit(phase.id)} className="p-0.5 text-green-400 hover:bg-green-500/20 rounded"><Check className="w-3 h-3" /></button>
+                                    <button onClick={() => setLmEdit(null)} className="p-0.5 text-red-400 hover:bg-red-500/20 rounded"><X className="w-3 h-3" /></button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Admin add buttons */}
+                            {isAdmin && !(lmEdit?.taskId === task.id) && (
+                              <div className="flex gap-1.5">
+                                <button onClick={() => setLmEdit({ pId: phase.id, taskId: task.id, itemId: null, type: 'text', label: '', url: '' })} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-white border border-dashed border-slate-600 hover:border-slate-400 rounded-lg transition-colors">
+                                  <Plus className="w-3 h-3" /> Add Text
+                                </button>
+                                <button onClick={() => setLmEdit({ pId: phase.id, taskId: task.id, itemId: null, type: 'link', label: '', url: '' })} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-white border border-dashed border-slate-600 hover:border-slate-400 rounded-lg transition-colors">
+                                  <ExternalLink className="w-3 h-3" /> Add Link
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
 
