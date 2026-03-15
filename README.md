@@ -143,7 +143,7 @@ All secrets live in **AWS Secrets Manager** (`agent-prod-ca-app-secrets`) and ar
 |---|---|
 | URL | https://agent.alexcty.com |
 | Email | `admin@cisco.com` |
-| Password | `Cisco123!` |
+| Password | *(set during bootstrap — check Secrets Manager)*|
 
 ---
 

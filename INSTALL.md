@@ -101,8 +101,7 @@ kubectl exec -n agent deploy/backend -- python init_db.py
 ### 7. Create the admin user
 ```bash
 kubectl exec -n agent deploy/backend -- python create_admin.py
-# Creates: admin@cisco.com / Cisco123!
-# Change the password after first login.
+  # Creates the admin account — change the password immediately after first login.
 ```
 
 ### 8. Verify

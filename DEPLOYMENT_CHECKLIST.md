@@ -51,7 +51,7 @@ Use this checklist for every production deployment. The automated deploy script 
 - [ ] Create admin user:
   ```bash
   kubectl exec -n agent deploy/backend -- python create_admin.py
-  # Default: admin@cisco.com / Cisco123!
+  # Creates the admin account — see Secrets Manager or ask your admin for credentials
   ```
 
 ---
@@ -105,7 +105,7 @@ curl -sI https://agent.alexcty.com | head -5
 
 ### Functional Smoke Test
 - [ ] Open https://agent.alexcty.com in browser
-- [ ] Login with `admin@cisco.com` / `Cisco123!`
+- [ ] Login with admin credentials (see Secrets Manager `agent-prod-ca-app-secrets`)
 - [ ] Send a chat message — response should arrive from Cisco GPT-4.1
 - [ ] Upload a document — should appear in Documents list
 - [ ] Check `/api/docs` — FastAPI Swagger UI should load
