@@ -357,8 +357,16 @@ export function MainPortal() {
             </div>
           </div>
         )}
-        {activeView === 'onboarding' && <Onboarding />}
-        {activeView === 'onboarding-sim' && user?.role === 'admin' && <Onboarding simulateUser={true} />}
+        {activeView === 'onboarding' && (
+          <div className="flex-1 overflow-y-auto h-full">
+            <Onboarding />
+          </div>
+        )}
+        {activeView === 'onboarding-sim' && user?.role === 'admin' && (
+          <div className="flex-1 overflow-y-auto h-full">
+            <Onboarding simulateUser={true} />
+          </div>
+        )}
         {activeView === 'bookmarks' && <BookmarkPage />}
       </div>
     </div>

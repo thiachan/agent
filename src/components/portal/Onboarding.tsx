@@ -165,7 +165,7 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean })
 
   // ── Render ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="h-full overflow-y-auto bg-slate-950 text-white">
       {/* ── Fireworks overlay ── */}
       {fireworks && (
         <div
@@ -490,11 +490,16 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean })
                           ) : isAdmin && !isEditingUrl ? (
                             <button
                               onClick={() => startTaskEdit(phase.id, task.id, 'url', task.url || '')}
-                              className="flex items-center gap-1 px-2 py-1 border border-dashed border-slate-600 text-slate-500 hover:text-blue-400 hover:border-blue-400/50 text-xs rounded-lg transition-colors"
+                              title="Click to set a URL for Learn More"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/40 hover:bg-blue-600 text-blue-200 hover:text-white text-xs font-semibold rounded-lg transition-colors border border-dashed border-blue-500/50"
                             >
-                              <Plus className="w-3 h-3" /> Add URL
+                              <ExternalLink className="w-3 h-3" /> Learn More
                             </button>
-                          ) : null}
+                          ) : (
+                            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 text-slate-500 text-xs font-semibold rounded-lg cursor-default border border-slate-700">
+                              <ExternalLink className="w-3 h-3" /> Learn More
+                            </span>
+                          )}
 
                           <button
                             onClick={() => toggle(task.id)}
