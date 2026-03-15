@@ -92,10 +92,10 @@ spec:
           resources:
             requests:
               cpu: "500m"
-              memory: "512Mi"
+              memory: "1Gi"
             limits:
               cpu: "2000m"
-              memory: "2048Mi"
+              memory: "4Gi"   # 4Gi needed: 2 uvicorn workers × ChromaDB + embeddings
 
           # All secrets injected from the k8s Secret created by ExternalSecret
           envFrom:
@@ -109,11 +109,11 @@ spec:
             - name: AWS_REGION
               value: "ca-central-1"
             - name: S3_UPLOADS_BUCKET
-              # Replace with value from: terraform output s3_uploads_bucket
-              value: "S3_UPLOADS_BUCKET_PLACEHOLDER"
+              # ca-central-1 prod value — update if re-provisioned via terraform
+              value: "agent-prod-ca-uploads-978027421922"
             - name: S3_GENERATED_BUCKET
-              # Replace with value from: terraform output s3_generated_bucket
-              value: "S3_GENERATED_BUCKET_PLACEHOLDER"
+              # ca-central-1 prod value — update if re-provisioned via terraform
+              value: "agent-prod-ca-generated-978027421922"
             - name: ANONYMIZED_TELEMETRY
               value: "False"
             - name: PYTHONUNBUFFERED

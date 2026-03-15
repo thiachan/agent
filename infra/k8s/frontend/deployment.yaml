@@ -71,6 +71,9 @@ spec:
               value: "production"
             - name: NEXT_TELEMETRY_DISABLED
               value: "1"
+            # NEXT_PUBLIC_API_URL must be baked in at docker build time via:
+            #   --build-arg NEXT_PUBLIC_API_URL=https://agent.alexcty.com
+            # It is NOT a runtime env var — Next.js inlines it at build.
           envFrom:
             - secretRef:
                 name: app-secrets
