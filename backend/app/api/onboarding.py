@@ -170,6 +170,7 @@ class SettingsPayload(BaseModel):
     subtitle: str
     ladderLabels: List[str]
     ladderSubs: List[str] = ["Phase 1 \u00b7 0\u201330 Days", "Phase 2 \u00b7 31\u201360 Days", "Phase 3 \u00b7 61\u201390 Days", "Phase 4 \u00b7 91\u2013120 Days"]
+    tipCards: List[str] = []
 
 
 @router.put("/settings")
@@ -181,7 +182,7 @@ async def update_settings(
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     record = db.query(OnboardingContent).filter_by(key=SETTINGS_KEY).first()
-    data = {"title": payload.title, "subtitle": payload.subtitle, "ladderLabels": payload.ladderLabels, "ladderSubs": payload.ladderSubs}
+    data = {"title": payload.title, "subtitle": payload.subtitle, "ladderLabels": payload.ladderLabels, "ladderSubs": payload.ladderSubs, "tipCards": payload.tipCards}
     if record is None:
         record = OnboardingContent(key=SETTINGS_KEY, data=json.dumps(data))
         db.add(record)
