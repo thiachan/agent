@@ -17,11 +17,12 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     # Route traffic to pod IP directly (required for Fargate; good practice on EC2 nodes too)
     alb.ingress.kubernetes.io/target-type: ip
-    # Listen on HTTP port 80 only (add HTTPS when you have an ACM cert)
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
-    # TLS certificate — set to your ACM cert ARN when ready; commented out for HTTP-only
-    # alb.ingress.kubernetes.io/certificate-arn: "ACM_CERTIFICATE_ARN"
-    # alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # Listen on HTTP (80) and HTTPS (443)
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    # ACM certificate for agent.alexcty.com
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:ca-central-1:978027421922:certificate/796de4c2-5fb4-4917-bd84-38172d8c8906"
+    # Redirect all HTTP traffic to HTTPS
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
     # Share one ALB across all ingresses in the agent namespace
     alb.ingress.kubernetes.io/group.name: agent
     # Health check for backend target group
