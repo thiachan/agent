@@ -1,214 +1,197 @@
-# Installation Guide - AWS EC2 Ubuntu
+# AGENT Platform — Installation Guide
 
-This guide provides a one-command installation for all dependencies on AWS EC2 Ubuntu 22.04 LTS.
+**Environment: AWS EKS · ca-central-1**
 
-## Quick Start
+> For day-to-day deploys after the cluster is running, jump straight to [Standard Deployment](#standard-deployment).
 
-### Option 1: Automated Setup Script (Recommended)
+---
 
-1. **Upload the setup script to your EC2 instance:**
-   ```bash
-   # From your local machine
-   scp -i "your-key.pem" setup-ubuntu.sh ubuntu@<EC2_IP>:/home/ubuntu/
-   ```
+## Architecture Summary
 
-2. **SSH into your EC2 instance:**
-   ```bash
-   ssh -i "your-key.pem" ubuntu@<EC2_IP>
-   ```
+The platform runs entirely on AWS. There is no local setup to run in production — everything is containerized on EKS.
 
-3. **Make the script executable and run it:**
-   ```bash
-   chmod +x setup-ubuntu.sh
-   ./setup-ubuntu.sh
-   ```
+| Layer | Technology |
+|---|---|
+| Compute | AWS EKS (Kubernetes) — `agent-prod-ca`, `ca-central-1` |
+| Database | Aurora PostgreSQL Serverless v2 |
+| Vector DB | ChromaDB on EBS (persistent volume) |
+| File Storage | S3 (uploads + generated files) |
+| Secrets | AWS Secrets Manager → External Secrets Operator |
+| DNS / CDN | Cloudflare → AWS ALB |
+| Images | AWS ECR |
 
-The script will:
-- ✅ Update system packages
-- ✅ Install Python 3.10+ with all development tools
-- ✅ Install Node.js 18.x
-- ✅ Install all system dependencies (FFmpeg, image libraries, etc.)
-- ✅ Install PostgreSQL client libraries
-- ✅ Install Nginx and Certbot
-- ✅ Create application directory structure
-- ✅ Set up Python virtual environment
-- ✅ Install all Python packages from `requirements.txt`
-- ✅ Install frontend dependencies
-- ✅ Create systemd service templates
+---
 
-### Option 2: Manual Installation
+## Machine Requirements (Dev / Deploy Machine)
 
-If you prefer to install manually, follow the steps in `docs/AWS_EC2_DEPLOYMENT_GUIDE.md`.
-
-## What Gets Installed
-
-### System Packages
-- **Build Tools**: `build-essential`, `python3-dev`, `python3-pip`
-- **Audio Processing**: `ffmpeg` and codec libraries (for pydub, moviepy, whisper)
-- **Image Processing**: `libjpeg-dev`, `libpng-dev`, `libfreetype6-dev` (for Pillow)
-- **Vector Operations**: `libgomp1`, `libatlas-base-dev` (for ChromaDB, sentence-transformers)
-- **Database**: `postgresql-client`, `libpq-dev` (PostgreSQL support)
-- **Cryptography**: `libssl-dev`, `libffi-dev` (for python-jose)
-
-### Runtime Services
-- **Python 3.10+**: With venv support
-- **Node.js 18.x**: With npm
-- **Nginx**: Web server and reverse proxy
-- **Certbot**: SSL certificate management
-- **PostgreSQL** (optional): Database server
-
-### Python Packages
-All packages from `backend/requirements.txt`:
-- FastAPI and Uvicorn
-- SQLAlchemy (with PostgreSQL support)
-- LangChain and OpenAI libraries
-- ChromaDB
-- Document processing libraries
-- Audio processing libraries
-- AWS SDK (boto3)
-
-### Frontend Dependencies
-All packages from `package.json`:
-- Next.js 14
-- React 18
-- TypeScript
-- Tailwind CSS
-- And all other frontend dependencies
-
-## Post-Installation Steps
-
-### 1. Configure Environment Variables
+You need one machine with:
+- AWS CLI v2
+- docker (for building and pushing images)
+- kubectl
+- git
+- Python 3.11+ (optional — for local backend testing only)
 
 ```bash
-cd ~/apps/AGENT/backend
-nano .env
+# Ubuntu/Debian quick install
+sudo apt-get update && sudo apt-get install -y git docker.io python3 python3-pip awscli
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 ```
 
-Add your configuration (see `docs/AWS_EC2_DEPLOYMENT_GUIDE.md` for details).
+---
 
-### 2. Initialize Database
+## First-Time Cluster Bootstrap
 
+### 1. Clone the repository
 ```bash
-cd ~/apps/AGENT/backend
-source venv/bin/activate
-python init_db.py
+git clone <repo-url>
+cd AGENT
+git checkout EKS-CA-v1
 ```
 
-### 3. Build Frontend
-
+### 2. Configure AWS credentials
 ```bash
-cd ~/apps/AGENT
-npm run build
+aws configure
+# AWS Access Key ID:     <your key>
+# AWS Secret Access Key: <your secret>
+# Default region:        ca-central-1
+# Default output:        json
 ```
 
-### 4. Start Services
-
-**Option A: Using systemd (Production)**
+Verify:
 ```bash
-sudo cp /tmp/hrsp-backend.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable hrsp-backend
-sudo systemctl start hrsp-backend
+aws sts get-caller-identity
+# Should return account: 978027421922
 ```
 
-**Option B: Manual (Development)**
+### 3. Bootstrap AWS infrastructure (once)
 ```bash
-cd ~/apps/AGENT/backend
-source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+chmod +x infra/scripts/bootstrap-ca.sh
+./infra/scripts/bootstrap-ca.sh
 ```
 
-## Troubleshooting
+This script provisions:
+- VPC + subnets (if not existing)
+- EKS cluster `agent-prod-ca`
+- Aurora PostgreSQL cluster
+- S3 buckets (`uploads` and `generated`)
+- ECR repositories
+- IAM roles (IRSA for External Secrets, S3, ECR)
+- External Secrets Operator installation
 
-### Python Package Installation Fails
+### 4. Confirm kubeconfig is set
+```bash
+aws eks update-kubeconfig --region ca-central-1 --name agent-prod-ca
+kubectl get nodes
+# Should show m5.large nodes in Ready state
+```
 
-If you encounter errors installing Python packages:
+### 5. Deploy the application (first time)
+```bash
+./infra/scripts/deploy-ca.sh both
+```
+
+This builds backend and frontend Docker images, pushes to ECR, and triggers rolling restarts on EKS.
+
+### 6. Run database migrations
+```bash
+kubectl exec -n agent deploy/backend -- python init_db.py
+```
+
+### 7. Create the admin user
+```bash
+kubectl exec -n agent deploy/backend -- python create_admin.py
+# Creates: admin@cisco.com / Cisco123!
+# Change the password after first login.
+```
+
+### 8. Verify
+```bash
+kubectl get pods -n agent
+# All pods Running
+
+curl -s https://agent.alexcty.com/health
+# {"status": "healthy"}
+```
+
+---
+
+## Standard Deployment
+
+After initial setup, all updates are one command:
 
 ```bash
-# Ensure all system dependencies are installed
-sudo apt install -y python3-dev python3-pip build-essential
+git pull origin EKS-CA-v1
+./infra/scripts/deploy-ca.sh both      # rebuild + redeploy both services
+./infra/scripts/deploy-ca.sh backend   # backend only
+./infra/scripts/deploy-ca.sh frontend  # frontend only
+```
 
-# Upgrade pip
-pip install --upgrade pip setuptools wheel
+> **Important:** The frontend must always be built with `NEXT_PUBLIC_API_URL=https://agent.alexcty.com` baked in at Docker build time. The `deploy-ca.sh` script handles this automatically. Do not build the frontend image manually without this arg.
 
-# Try installing again
+---
+
+## Local Development (Optional)
+
+For local backend iteration only:
+
+```bash
+cd backend
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+
+# Copy secrets from Secrets Manager for local use
+aws secretsmanager get-secret-value \
+  --secret-id agent-prod-ca-app-secrets \
+  --query SecretString --output text > .env.local
+# Edit .env.local to set DATABASE_URL to a local Postgres or tunnel to Aurora
+
+uvicorn app.main:app --reload --port 8000
 ```
 
-### FFmpeg Not Found
+For local frontend:
+```bash
+# At root
+NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+```
 
-If audio processing fails:
+---
+
+## Updating Secrets
+
+All secrets are managed in AWS Secrets Manager under `agent-prod-ca-app-secrets`.
+
+To add or update a key:
+```bash
+# Fetch current secret JSON
+CURRENT=$(aws secretsmanager get-secret-value \
+  --secret-id agent-prod-ca-app-secrets \
+  --query SecretString --output text)
+
+# Edit and update
+echo "$CURRENT" | python3 -c "import json,sys; d=json.load(sys.stdin); d['NEW_KEY']='value'; print(json.dumps(d))" \
+  | aws secretsmanager put-secret-value \
+      --secret-id agent-prod-ca-app-secrets \
+      --secret-string file:///dev/stdin
+```
+
+The External Secrets Operator will sync the new value to the k8s Secret within 1 hour, or force it immediately:
+```bash
+kubectl annotate externalsecret app-secrets -n agent force-sync=$(date +%s) --overwrite
+kubectl rollout restart deployment/backend deployment/frontend -n agent
+```
+
+---
+
+## Teardown
+
+> **Destructive — this deletes all AWS resources including the database.**
 
 ```bash
-sudo apt install -y ffmpeg
-ffmpeg -version  # Verify installation
+cd infra/terraform-ca
+terraform destroy
 ```
 
-### ChromaDB Installation Issues
+---
 
-If ChromaDB fails to install:
-
-```bash
-# Install required system libraries
-sudo apt install -y libgomp1 libatlas-base-dev
-
-# Try installing ChromaDB again
-pip install chromadb==0.4.18
-```
-
-### Node.js Version Issues
-
-If Node.js version is incorrect:
-
-```bash
-# Remove existing Node.js
-sudo apt remove nodejs npm
-
-# Install Node.js 18.x
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
-```
-
-## Verification
-
-After installation, verify everything is working:
-
-```bash
-# Check Python
-python3 --version  # Should be 3.10 or higher
-pip --version
-
-# Check Node.js
-node --version  # Should be v18.x or higher
-npm --version
-
-# Check FFmpeg
-ffmpeg -version
-
-# Check PostgreSQL (if installed)
-psql --version
-
-# Check Nginx
-nginx -v
-
-# Check Python packages
-cd ~/apps/AGENT/backend
-source venv/bin/activate
-pip list | grep -E "(fastapi|uvicorn|chromadb|langchain)"
-```
-
-## Additional Resources
-
-- **Deployment Guide**: See `docs/AWS_EC2_DEPLOYMENT_GUIDE.md`
-- **Remote Development**: See `docs/REMOTE_DEVELOPMENT_SETUP.md`
-- **Architecture Plan**: See `docs/DEPLOYMENT_PLAN.md`
-
-## Support
-
-If you encounter issues during installation:
-1. Check the error messages carefully
-2. Verify all prerequisites are met
-3. Check system logs: `journalctl -xe`
-4. Review the troubleshooting section above
-
-
+*AGENT Platform · Installation Guide · EKS-CA-v1*
