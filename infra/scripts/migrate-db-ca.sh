@@ -41,15 +41,27 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 # ── Validate prerequisites ────────────────────────────────────────────────────
-[[ -z "${EC2_HOST:-}" ]] && die "EC2_HOST is not set. Export the us-west-1 EC2 public IP."
-[[ -z "${EC2_KEY:-}"  ]] && die "EC2_KEY is not set. Export path to your SSH key file."
-EC2_USER="${EC2_USER:-ubuntu}"
+# LOCAL_MODE=true — run from the source EC2 itself (no SSH needed).
+# LOCAL_MODE=false (default) — run from any machine with SSH access to the source EC2.
+LOCAL_MODE="${LOCAL_MODE:-false}"
+
+if [[ "$LOCAL_MODE" == "true" ]]; then
+  # We ARE on the source EC2 — data lives right here.
+  EC2_HOST="localhost"
+  EC2_USER="$(whoami)"
+  EC2_KEY=""
+  info "LOCAL_MODE=true: reading data from local disk (no SSH)."
+else
+  [[ -z "${EC2_HOST:-}" ]] && die "EC2_HOST is not set. Export the us-west-1 EC2 public IP."
+  [[ -z "${EC2_KEY:-}"  ]] && die "EC2_KEY is not set. Export path to your SSH key file."
+  EC2_USER="${EC2_USER:-ubuntu}"
+  ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+    "${EC2_USER}@${EC2_HOST}" "echo ok" >/dev/null 2>&1 \
+    || die "Cannot SSH to ${EC2_USER}@${EC2_HOST} with key $EC2_KEY"
+fi
 command -v pgloader >/dev/null 2>&1  || die "pgloader not found. Install: sudo apt install pgloader  OR  brew install pgloader"
 command -v kubectl  >/dev/null 2>&1  || die "kubectl not found."
 command -v aws      >/dev/null 2>&1  || die "aws CLI not found."
-ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-  "${EC2_USER}@${EC2_HOST}" "echo ok" >/dev/null 2>&1 \
-  || die "Cannot SSH to ${EC2_USER}@${EC2_HOST} with key $EC2_KEY"
 success "All prerequisites satisfied."
 
 # ── Resolve terraform outputs ─────────────────────────────────────────────────
@@ -84,25 +96,26 @@ info "━━━━━━━━━━━━━━━━━━━━━━━━�
 info "PART 1: Relational DB  (intranet.db → Aurora PostgreSQL)"
 info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# 1a. Briefly pause the EC2 backend to prevent writes mid-copy, then copy
-info "Pausing EC2 backend process for consistent snapshot..."
-EC2_BACKEND_PID=$(ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no \
-  "${EC2_USER}@${EC2_HOST}" "pgrep -f 'uvicorn main:app' || true")
+# 1a. Pause backend for consistent snapshot, copy intranet.db
+info "Pausing backend process for consistent snapshot..."
+EC2_BACKEND_PID=$(pgrep -f 'uvicorn main:app' || true)
 
 if [[ -n "$EC2_BACKEND_PID" ]]; then
-  ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no \
-    "${EC2_USER}@${EC2_HOST}" "kill -STOP $EC2_BACKEND_PID"
-  info "EC2 backend paused (PID $EC2_BACKEND_PID). Copying SQLite now..."
+  kill -STOP $EC2_BACKEND_PID
+  info "Backend paused (PID $EC2_BACKEND_PID). Copying SQLite now..."
 fi
 
-scp -i "$EC2_KEY" -o StrictHostKeyChecking=no \
-  "${EC2_USER}@${EC2_HOST}:${EC2_BASE_DIR}/backend/intranet.db" \
-  /tmp/intranet.db
+if [[ "$LOCAL_MODE" == "true" ]]; then
+  cp "${EC2_BASE_DIR}/backend/intranet.db" /tmp/intranet.db
+else
+  scp -i "$EC2_KEY" -o StrictHostKeyChecking=no \
+    "${EC2_USER}@${EC2_HOST}:${EC2_BASE_DIR}/backend/intranet.db" \
+    /tmp/intranet.db
+fi
 
 if [[ -n "$EC2_BACKEND_PID" ]]; then
-  ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no \
-    "${EC2_USER}@${EC2_HOST}" "kill -CONT $EC2_BACKEND_PID"
-  success "EC2 backend resumed."
+  kill -CONT $EC2_BACKEND_PID
+  success "Backend resumed."
 fi
 success "SQLite copied to /tmp/intranet.db"
 
@@ -133,35 +146,128 @@ info "Waiting for schema init job..."
 kubectl wait --for=condition=complete job/db-schema-init -n agent --timeout=180s
 success "Aurora schema created."
 
-# 1c. Migrate all data with pgloader
-info "Migrating data from SQLite → Aurora with pgloader..."
-cat <<PGEOF | pgloader --verbose -
-LOAD DATABASE
-  FROM sqlite:///tmp/intranet.db
-  INTO postgresql://${DB_USER}:${DB_PASS}@${RDS_ENDPOINT}/${DB_NAME}
+# 1c. Migrate all data via a k8s Job inside the cluster (has VPC access to Aurora)
+info "Uploading SQLite to S3 staging for in-cluster migration..."
+S3_SQLITE_KEY="migration-staging/intranet_$(date +%Y%m%d_%H%M%S).db"
+aws s3 cp /tmp/intranet.db "s3://${S3_UPLOADS}/${S3_SQLITE_KEY}" --region "$REGION"
+success "SQLite uploaded to s3://${S3_UPLOADS}/${S3_SQLITE_KEY}"
 
-  WITH include drop, create tables, create indexes, reset sequences,
-       batch rows = 5000, batch concurrency = 4
+info "Running in-cluster Python migration job (SQLite → Aurora)..."
+kubectl delete job db-data-migrate -n agent --ignore-not-found=true
+cat <<EOF | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-data-migrate
+  namespace: agent
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      serviceAccountName: backend
+      restartPolicy: Never
+      containers:
+        - name: db-data-migrate
+          image: ${ECR_BACKEND}:latest
+          command:
+            - python
+            - -c
+            - |
+              import os, sqlite3, boto3, tempfile
+              from sqlalchemy import create_engine, text, inspect
 
-  SET work_mem to '128MB', maintenance_work_mem to '512MB'
+              region = "${REGION}"
+              s3_bucket = "${S3_UPLOADS}"
+              s3_key    = "${S3_SQLITE_KEY}"
+              db_url    = os.environ["DATABASE_URL"]
 
-  EXCLUDING TABLE NAMES MATCHING 'alembic_version'
+              # Download SQLite from S3
+              print("Downloading SQLite from S3...")
+              s3 = boto3.client("s3", region_name=region)
+              with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+                  s3.download_fileobj(s3_bucket, s3_key, f)
+                  sqlite_path = f.name
+              print(f"Downloaded to {sqlite_path}")
 
-  AFTER LOAD DO
-    \$\$ SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1)); \$\$,
-    \$\$ SELECT setval('documents_id_seq', COALESCE((SELECT MAX(id) FROM documents), 1)); \$\$
-  ;
-PGEOF
+              src = sqlite3.connect(sqlite_path)
+              src.row_factory = sqlite3.Row
+              dst = create_engine(db_url)
+              inspector = inspect(dst)
+
+              # Build a map of boolean columns per table from the PG schema
+              bool_cols = {}
+              for tname in inspector.get_table_names():
+                  bool_cols[tname] = {
+                      col["name"]
+                      for col in inspector.get_columns(tname)
+                      if str(col["type"]).upper() == "BOOLEAN"
+                  }
+
+              tables = [r[0] for r in src.execute(
+                  "SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('alembic_version','sqlite_sequence')"
+              ).fetchall()]
+              print(f"Tables to migrate: {tables}")
+
+              for table in tables:
+                  rows = src.execute(f"SELECT * FROM {table}").fetchall()
+                  if not rows:
+                      print(f"  {table}: empty, skipping")
+                      continue
+                  cols = rows[0].keys()
+                  col_list = ", ".join(f'"{c}"' for c in cols)
+                  placeholders = ", ".join(f":{c}" for c in cols)
+
+                  # Convert SQLite int 0/1 → Python bool for boolean PG columns
+                  bools = bool_cols.get(table, set())
+                  def fix_row(r):
+                      d = dict(r)
+                      for k in bools:
+                          if k in d and d[k] is not None:
+                              d[k] = bool(d[k])
+                      return d
+
+                  with dst.begin() as conn:
+                      conn.execute(text("SET session_replication_role = replica"))  # disable FK checks
+                      conn.execute(text(f"DELETE FROM {table}"))
+                      conn.execute(
+                          text(f"INSERT INTO {table} ({col_list}) VALUES ({placeholders})"),
+                          [fix_row(r) for r in rows],
+                      )
+                      conn.execute(text("SET session_replication_role = DEFAULT"))
+                  print(f"  {table}: {len(rows)} rows migrated")
+
+              # Fix sequences
+              with dst.begin() as conn:
+                  for tbl, col in [("users","id"),("documents","id")]:
+                      try:
+                          conn.execute(text(f"SELECT setval(pg_get_serial_sequence('{tbl}','{col}'), COALESCE((SELECT MAX({col}) FROM {tbl}),1))"))
+                      except Exception as e:
+                          print(f"  sequence fix {tbl}.{col}: {e}")
+
+              src.close()
+              os.unlink(sqlite_path)
+              print("Migration complete.")
+          envFrom:
+            - secretRef:
+                name: app-secrets
+EOF
+info "Waiting for db-data-migrate job (up to 5 minutes)..."
+kubectl wait --for=condition=complete job/db-data-migrate -n agent --timeout=300s
+kubectl logs job/db-data-migrate -n agent
 success "Relational DB migration complete."
 
-# 1d. Quick verification
+# Clean up staging SQLite
+aws s3 rm "s3://${S3_UPLOADS}/${S3_SQLITE_KEY}" --region "$REGION"
+
+# 1d. Quick verification via a pod exec (has DB access)
 EC2_USER_COUNT=$(sqlite3 /tmp/intranet.db "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "0")
-AURORA_USER_COUNT=$(PGPASSWORD="$DB_PASS" psql -h "$RDS_ENDPOINT" -U "$DB_USER" -d "$DB_NAME" \
-  -tAc "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "unknown")
-info "User count — EC2 SQLite: ${EC2_USER_COUNT}  |  Aurora: ${AURORA_USER_COUNT}"
+AURORA_USER_COUNT=$(kubectl exec -n agent deploy/backend -- \
+  python -c "from app.core.database import SessionLocal; s=SessionLocal(); print(s.execute(__import__('sqlalchemy').text('SELECT COUNT(*) FROM users')).scalar()); s.close()" \
+  2>/dev/null || echo "unknown")
+info "User count — SQLite: ${EC2_USER_COUNT}  |  Aurora: ${AURORA_USER_COUNT}"
 [[ "$EC2_USER_COUNT" == "$AURORA_USER_COUNT" ]] \
   && success "Row counts match." \
-  || warn "Row counts differ — review pgloader output above before proceeding."
+  || warn "Row counts differ — review job logs above before proceeding."
 
 echo ""
 
@@ -172,21 +278,24 @@ info "━━━━━━━━━━━━━━━━━━━━━━━━�
 info "PART 2: ChromaDB vector store → EBS PVC"
 info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# 2a. Confirm vector_db directory exists on EC2
-VECTOR_DB_SIZE=$(ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no \
-  "${EC2_USER}@${EC2_HOST}" \
-  "du -sh ${EC2_BASE_DIR}/backend/vector_db 2>/dev/null || echo '0'")
-info "EC2 vector_db size: ${VECTOR_DB_SIZE}"
+# 2a. Confirm vector_db directory exists
+VECTOR_DB_SIZE=$(du -sh "${EC2_BASE_DIR}/backend/vector_db" 2>/dev/null || echo '0')
+info "vector_db size: ${VECTOR_DB_SIZE}"
 
-# 2b. Stream tar from EC2 directly to S3 staging (no local disk needed)
+# 2b. Stream tar directly to S3 staging (no local disk needed)
 S3_STAGING_KEY="migration-staging/vector_db_$(date +%Y%m%d_%H%M%S).tar.gz"
-info "Streaming vector_db from EC2 → S3 staging (s3://${S3_UPLOADS}/${S3_STAGING_KEY})..."
-ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no \
-  "${EC2_USER}@${EC2_HOST}" \
-  "tar -czf - -C ${EC2_BASE_DIR}/backend vector_db" \
-  | aws s3 cp - "s3://${S3_UPLOADS}/${S3_STAGING_KEY}" \
-      --region "$REGION" \
-      --expected-size 0   # suppress size warning for streaming
+info "Streaming vector_db → S3 staging (s3://${S3_UPLOADS}/${S3_STAGING_KEY})..."
+if [[ "$LOCAL_MODE" == "true" ]]; then
+  tar -czf - -C "${EC2_BASE_DIR}/backend" vector_db \
+    | aws s3 cp - "s3://${S3_UPLOADS}/${S3_STAGING_KEY}" \
+        --region "$REGION" --expected-size 0
+else
+  ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no \
+    "${EC2_USER}@${EC2_HOST}" \
+    "tar -czf - -C ${EC2_BASE_DIR}/backend vector_db" \
+    | aws s3 cp - "s3://${S3_UPLOADS}/${S3_STAGING_KEY}" \
+        --region "$REGION" --expected-size 0
+fi
 success "ChromaDB archive uploaded to S3 staging."
 
 # 2c. Run a k8s Job that mounts the PVC and extracts the archive into it
@@ -210,12 +319,13 @@ spec:
             claimName: chroma-vector-db
       containers:
         - name: chroma-restore
-          image: amazon/aws-cli:latest
+          image: public.ecr.aws/amazonlinux/amazonlinux:2023
           command:
             - /bin/sh
             - -c
             - |
               set -e
+              yum install -y awscli tar gzip -q
               echo "Downloading archive from S3..."
               aws s3 cp s3://${S3_UPLOADS}/${S3_STAGING_KEY} /tmp/vector_db.tar.gz \
                 --region ${REGION}
@@ -249,22 +359,25 @@ info "PART 3: User uploads → S3 (s3://${S3_UPLOADS}/uploads/)"
 info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 3a. Show upload size before sync
-UPLOADS_SIZE=$(ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no \
-  "${EC2_USER}@${EC2_HOST}" \
-  "du -sh ${EC2_BASE_DIR}/backend/uploads 2>/dev/null || echo '0 (empty)'")
-info "EC2 uploads size: ${UPLOADS_SIZE}"
+UPLOADS_SIZE=$(du -sh "${EC2_BASE_DIR}/backend/uploads" 2>/dev/null || echo '0 (empty)')
+info "Uploads size: ${UPLOADS_SIZE}"
 
-# 3b. Stream tar to a staging key, then expand to uploads/ prefix in S3
-# Using aws s3 sync from inside an EC2-side tunnel — but since we may not have
-# aws CLI configured on EC2, we stream via tar and extract with a k8s Job.
+# 3b. Stream tar to S3 staging, then expand with a k8s Job
 S3_UPLOADS_STAGING="migration-staging/uploads_$(date +%Y%m%d_%H%M%S).tar.gz"
-info "Streaming uploads from EC2 → S3 staging..."
-ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no \
-  "${EC2_USER}@${EC2_HOST}" \
-  "cd ${EC2_BASE_DIR}/backend && tar -czf - uploads 2>/dev/null || tar -czf - -T /dev/null" \
-  | aws s3 cp - "s3://${S3_UPLOADS}/${S3_UPLOADS_STAGING}" \
-      --region "$REGION" \
-      --expected-size 0
+info "Streaming uploads → S3 staging..."
+if [[ "$LOCAL_MODE" == "true" ]]; then
+  cd "${EC2_BASE_DIR}/backend" && \
+    tar -czf - uploads 2>/dev/null \
+    | aws s3 cp - "s3://${S3_UPLOADS}/${S3_UPLOADS_STAGING}" \
+        --region "$REGION" --expected-size 0
+  cd - >/dev/null
+else
+  ssh -i "$EC2_KEY" -o StrictHostKeyChecking=no \
+    "${EC2_USER}@${EC2_HOST}" \
+    "cd ${EC2_BASE_DIR}/backend && tar -czf - uploads 2>/dev/null || tar -czf - -T /dev/null" \
+    | aws s3 cp - "s3://${S3_UPLOADS}/${S3_UPLOADS_STAGING}" \
+        --region "$REGION" --expected-size 0
+fi
 success "Uploads archive at s3://${S3_UPLOADS}/${S3_UPLOADS_STAGING}"
 
 # 3c. k8s Job: extract archive and sync each file to correct S3 prefix
@@ -284,12 +397,13 @@ spec:
       restartPolicy: Never
       containers:
         - name: uploads-restore
-          image: amazon/aws-cli:latest
+          image: public.ecr.aws/amazonlinux/amazonlinux:2023
           command:
             - /bin/sh
             - -c
             - |
               set -e
+              yum install -y awscli tar gzip -q
               echo "Downloading uploads archive from S3 staging..."
               aws s3 cp s3://${S3_UPLOADS}/${S3_UPLOADS_STAGING} /tmp/uploads.tar.gz \
                 --region ${REGION}
