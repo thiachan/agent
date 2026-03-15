@@ -52,7 +52,7 @@ spec:
       containers:
         - name: frontend
           # IMAGE is replaced by CI/CD
-          image: FRONTEND_IMAGE_PLACEHOLDER
+          image: 978027421922.dkr.ecr.ca-central-1.amazonaws.com/agent-prod-ca-frontend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

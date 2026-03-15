@@ -15,8 +15,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 0      # zero-downtime: never kill a pod before a new one is ready
-      maxSurge: 1
+      maxUnavailable: 1      # kill one old pod before creating new (avoids CPU/AZ surge)
+      maxSurge: 0
 
   template:
     metadata:
@@ -79,7 +79,7 @@ spec:
       containers:
         - name: backend
           # IMAGE is replaced by CI/CD: ACCOUNT.dkr.ecr.ca-central-1.amazonaws.com/agent-prod-ca-backend:SHA
-          image: BACKEND_IMAGE_PLACEHOLDER
+          image: 978027421922.dkr.ecr.ca-central-1.amazonaws.com/agent-prod-ca-backend:latest
           imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
