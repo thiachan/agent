@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { api } from '@/lib/api'
-import { Plus, Trash2, Pencil, Check, X, Trophy, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Lock } from 'lucide-react'
+import { Plus, Trash2, Pencil, Check, X, Trophy, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Lock, Lightbulb } from 'lucide-react'
 
 interface TableRow {
   id: string
@@ -331,12 +331,13 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean } 
         if (res.data.subtitle) setPageSubtitle(res.data.subtitle)
         if (res.data.ladderLabels) setLadderLabels(res.data.ladderLabels)
         if (res.data.ladderSubs) setLadderSubs(res.data.ladderSubs)
+        if (res.data.tipCards) setTipCards(res.data.tipCards)
       })
       .catch(() => {})
   }, [])
 
-  const saveSettings = (title: string, subtitle: string, labels: string[], subs: string[]) => {
-    api.put('/api/onboarding/settings', { title, subtitle, ladderLabels: labels, ladderSubs: subs }).catch(console.error)
+  const saveSettings = (title: string, subtitle: string, labels: string[], subs: string[], tips: string[]) => {
+    api.put('/api/onboarding/settings', { title, subtitle, ladderLabels: labels, ladderSubs: subs, tipCards: tips }).catch(console.error)
   }
 
   // Save this user's progress to backend (debounced 500 ms)
@@ -364,6 +365,13 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean } 
   const [pageSubtitle, setPageSubtitle] = useState('Industrial Model')
   const [ladderLabels, setLadderLabels] = useState(['Systems Operator', 'Story Architect', 'Customer Strategist', 'Field-Ready SE'])
   const [ladderSubs, setLadderSubs] = useState(['Phase 1 · 0–30 Days', 'Phase 2 · 31–60 Days', 'Phase 3 · 61–90 Days', 'Phase 4 · 91–120 Days'])
+  const [tipCards, setTipCards] = useState([
+    'Bookmark this page for easy access as you navigate throughout your SE onboarding journey.',
+    'Check off items as you go to track your progress. Your progress is automatically saved to your account.',
+    "Can't find what you need? Your assigned mentor or manager is ready to provide 1:1 support.",
+  ])
+  const [editingTipIdx, setEditingTipIdx] = useState<number | null>(null)
+  const [tipDraft, setTipDraft] = useState('')
   const [editingTitle, setEditingTitle] = useState(false)
   const [editingSubtitle, setEditingSubtitle] = useState(false)
   const [editingLadderIdx, setEditingLadderIdx] = useState<number | null>(null)
@@ -570,8 +578,8 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean } 
           {/* Title */}
           {isAdmin && editingTitle ? (
             <div className="flex items-center gap-2 mb-1">
-              <input autoFocus className="bg-slate-700/80 text-white border border-cyan-400/50 rounded px-2 py-1 text-2xl font-bold focus:outline-none w-full max-w-xl" value={labelDraft} onChange={e => setLabelDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { setPageTitle(labelDraft); saveSettings(labelDraft, pageSubtitle, ladderLabels, ladderSubs); setEditingTitle(false) } if (e.key === 'Escape') setEditingTitle(false) }} />
-              <button onClick={() => { setPageTitle(labelDraft); saveSettings(labelDraft, pageSubtitle, ladderLabels, ladderSubs); setEditingTitle(false) }} className="p-1 hover:bg-green-500/20 rounded text-green-400"><Check className="w-4 h-4" /></button>
+              <input autoFocus className="bg-slate-700/80 text-white border border-cyan-400/50 rounded px-2 py-1 text-2xl font-bold focus:outline-none w-full max-w-xl" value={labelDraft} onChange={e => setLabelDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { setPageTitle(labelDraft); saveSettings(labelDraft, pageSubtitle, ladderLabels, ladderSubs, tipCards); setEditingTitle(false) } if (e.key === 'Escape') setEditingTitle(false) }} />
+              <button onClick={() => { setPageTitle(labelDraft); saveSettings(labelDraft, pageSubtitle, ladderLabels, ladderSubs, tipCards); setEditingTitle(false) }} className="p-1 hover:bg-green-500/20 rounded text-green-400"><Check className="w-4 h-4" /></button>
               <button onClick={() => setEditingTitle(false)} className="p-1 hover:bg-red-500/20 rounded text-red-400"><X className="w-4 h-4" /></button>
             </div>
           ) : (
@@ -583,8 +591,8 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean } 
           {/* Subtitle */}
           {isAdmin && editingSubtitle ? (
             <div className="flex items-center gap-2 mt-1">
-              <input autoFocus className="bg-slate-700/80 text-cyan-400 border border-cyan-400/50 rounded px-2 py-0.5 text-sm font-medium focus:outline-none w-64" value={labelDraft} onChange={e => setLabelDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { setPageSubtitle(labelDraft); saveSettings(pageTitle, labelDraft, ladderLabels, ladderSubs); setEditingSubtitle(false) } if (e.key === 'Escape') setEditingSubtitle(false) }} />
-              <button onClick={() => { setPageSubtitle(labelDraft); saveSettings(pageTitle, labelDraft, ladderLabels, ladderSubs); setEditingSubtitle(false) }} className="p-1 hover:bg-green-500/20 rounded text-green-400"><Check className="w-3.5 h-3.5" /></button>
+              <input autoFocus className="bg-slate-700/80 text-cyan-400 border border-cyan-400/50 rounded px-2 py-0.5 text-sm font-medium focus:outline-none w-64" value={labelDraft} onChange={e => setLabelDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { setPageSubtitle(labelDraft); saveSettings(pageTitle, labelDraft, ladderLabels, ladderSubs, tipCards); setEditingSubtitle(false) } if (e.key === 'Escape') setEditingSubtitle(false) }} />
+              <button onClick={() => { setPageSubtitle(labelDraft); saveSettings(pageTitle, labelDraft, ladderLabels, ladderSubs, tipCards); setEditingSubtitle(false) }} className="p-1 hover:bg-green-500/20 rounded text-green-400"><Check className="w-3.5 h-3.5" /></button>
               <button onClick={() => setEditingSubtitle(false)} className="p-1 hover:bg-red-500/20 rounded text-red-400"><X className="w-3.5 h-3.5" /></button>
             </div>
           ) : (
@@ -646,8 +654,8 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean } 
                   <div className="w-full text-center">
                     {isAdmin && editingLadderIdx === i ? (
                       <div className="flex items-center gap-1 justify-center mt-0.5">
-                        <input autoFocus className="bg-slate-700/80 text-white border border-cyan-400/50 rounded px-1 py-0.5 text-[11px] font-bold focus:outline-none w-28 text-center" value={labelDraft} onChange={e => setLabelDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { const upd = ladderLabels.map((l, j) => j === i ? labelDraft : l); setLadderLabels(upd); saveSettings(pageTitle, pageSubtitle, upd, ladderSubs); setEditingLadderIdx(null) } if (e.key === 'Escape') setEditingLadderIdx(null) }} />
-                        <button onClick={() => { const upd = ladderLabels.map((l, j) => j === i ? labelDraft : l); setLadderLabels(upd); saveSettings(pageTitle, pageSubtitle, upd, ladderSubs); setEditingLadderIdx(null) }} className="p-0.5 hover:bg-green-500/20 rounded text-green-400"><Check className="w-3 h-3" /></button>
+                        <input autoFocus className="bg-slate-700/80 text-white border border-cyan-400/50 rounded px-1 py-0.5 text-[11px] font-bold focus:outline-none w-28 text-center" value={labelDraft} onChange={e => setLabelDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { const upd = ladderLabels.map((l, j) => j === i ? labelDraft : l); setLadderLabels(upd); saveSettings(pageTitle, pageSubtitle, upd, ladderSubs, tipCards); setEditingLadderIdx(null) } if (e.key === 'Escape') setEditingLadderIdx(null) }} />
+                        <button onClick={() => { const upd = ladderLabels.map((l, j) => j === i ? labelDraft : l); setLadderLabels(upd); saveSettings(pageTitle, pageSubtitle, upd, ladderSubs, tipCards); setEditingLadderIdx(null) }} className="p-0.5 hover:bg-green-500/20 rounded text-green-400"><Check className="w-3 h-3" /></button>
                         <button onClick={() => setEditingLadderIdx(null)} className="p-0.5 hover:bg-red-500/20 rounded text-red-400"><X className="w-3 h-3" /></button>
                       </div>
                     ) : (
@@ -658,8 +666,8 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean } 
                     )}
                     {isAdmin && editingLadderSubIdx === i ? (
                       <div className="flex items-center gap-1 justify-center mt-0.5">
-                        <input autoFocus className="bg-slate-700/80 text-slate-300 border border-slate-500/60 rounded px-1 py-0.5 text-[10px] focus:outline-none w-32 text-center" value={labelDraft} onChange={e => setLabelDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { const upd = ladderSubs.map((s, j) => j === i ? labelDraft : s); setLadderSubs(upd); saveSettings(pageTitle, pageSubtitle, ladderLabels, upd); setEditingLadderSubIdx(null) } if (e.key === 'Escape') setEditingLadderSubIdx(null) }} />
-                        <button onClick={() => { const upd = ladderSubs.map((s, j) => j === i ? labelDraft : s); setLadderSubs(upd); saveSettings(pageTitle, pageSubtitle, ladderLabels, upd); setEditingLadderSubIdx(null) }} className="p-0.5 hover:bg-green-500/20 rounded text-green-400"><Check className="w-3 h-3" /></button>
+                        <input autoFocus className="bg-slate-700/80 text-slate-300 border border-slate-500/60 rounded px-1 py-0.5 text-[10px] focus:outline-none w-32 text-center" value={labelDraft} onChange={e => setLabelDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { const upd = ladderSubs.map((s, j) => j === i ? labelDraft : s); setLadderSubs(upd); saveSettings(pageTitle, pageSubtitle, ladderLabels, upd, tipCards); setEditingLadderSubIdx(null) } if (e.key === 'Escape') setEditingLadderSubIdx(null) }} />
+                        <button onClick={() => { const upd = ladderSubs.map((s, j) => j === i ? labelDraft : s); setLadderSubs(upd); saveSettings(pageTitle, pageSubtitle, ladderLabels, upd, tipCards); setEditingLadderSubIdx(null) }} className="p-0.5 hover:bg-green-500/20 rounded text-green-400"><Check className="w-3 h-3" /></button>
                         <button onClick={() => setEditingLadderSubIdx(null)} className="p-0.5 hover:bg-red-500/20 rounded text-red-400"><X className="w-3 h-3" /></button>
                       </div>
                     ) : (
@@ -683,6 +691,70 @@ export function Onboarding({ simulateUser = false }: { simulateUser?: boolean } 
             })}
           </div>
         </div>
+
+        {/* ── Tip Cards ── */}
+        {tipCards.length > 0 && (
+          <div className="mb-8 grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.min(tipCards.length, 3)}, minmax(0,1fr))` }}>
+            {tipCards.map((tip, i) => (
+              <div key={i} className="relative group/tip flex items-start gap-3 bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3">
+                <Lightbulb className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                {isAdmin && editingTipIdx === i ? (
+                  <div className="flex-1 flex flex-col gap-2">
+                    <textarea
+                      autoFocus
+                      className="w-full bg-slate-700/80 text-white border border-cyan-400/50 rounded px-2 py-1 text-sm focus:outline-none resize-none"
+                      rows={3}
+                      value={tipDraft}
+                      onChange={e => setTipDraft(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          const upd = tipCards.map((t, j) => j === i ? tipDraft : t)
+                          setTipCards(upd)
+                          saveSettings(pageTitle, pageSubtitle, ladderLabels, ladderSubs, upd)
+                          setEditingTipIdx(null)
+                          e.preventDefault()
+                        }
+                        if (e.key === 'Escape') setEditingTipIdx(null)
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { const upd = tipCards.map((t, j) => j === i ? tipDraft : t); setTipCards(upd); saveSettings(pageTitle, pageSubtitle, ladderLabels, ladderSubs, upd); setEditingTipIdx(null) }}
+                        className="px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 border border-green-500/30 rounded transition-all"
+                      >Save</button>
+                      <button onClick={() => setEditingTipIdx(null)} className="px-2 py-1 text-xs text-gray-400 hover:bg-slate-600/50 border border-slate-600/50 rounded transition-all">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-300 flex-1">{tip}</p>
+                )}
+                {isAdmin && editingTipIdx !== i && (
+                  <div className="opacity-0 group-hover/tip:opacity-100 absolute top-2 right-2 flex gap-1 transition-opacity">
+                    <button onClick={() => { setTipDraft(tip); setEditingTipIdx(i) }} className="p-1 hover:bg-slate-600/50 rounded text-gray-500 hover:text-gray-300"><Pencil className="w-3 h-3" /></button>
+                    <button onClick={() => { const upd = tipCards.filter((_, j) => j !== i); setTipCards(upd); saveSettings(pageTitle, pageSubtitle, ladderLabels, ladderSubs, upd) }} className="p-1 hover:bg-red-500/20 rounded text-gray-500 hover:text-red-400"><X className="w-3 h-3" /></button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {isAdmin && (
+          <div className="mb-6 flex justify-end">
+            <button
+              onClick={() => {
+                const upd = [...tipCards, 'New tip — click to edit.']
+                setTipCards(upd)
+                saveSettings(pageTitle, pageSubtitle, ladderLabels, ladderSubs, upd)
+                setTipDraft('New tip — click to edit.')
+                setEditingTipIdx(upd.length - 1)
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-amber-400 hover:text-white hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-400/60 rounded-lg transition-all font-medium"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add tip
+            </button>
+          </div>
+        )}
 
         {/* Phases */}
         <div className="space-y-10">

@@ -19,6 +19,11 @@ DEFAULT_SETTINGS = {
     "subtitle": "Industrial Model",
     "ladderLabels": ["Systems Operator", "Story Architect", "Customer Strategist", "Field-Ready SE"],
     "ladderSubs": ["Phase 1 \u00b7 0\u201330 Days", "Phase 2 \u00b7 31\u201360 Days", "Phase 3 \u00b7 61\u201390 Days", "Phase 4 \u00b7 91\u2013120 Days"],
+    "tipCards": [
+        "Bookmark this page for easy access as you navigate throughout your SE onboarding journey.",
+        "Check off items as you go to track your progress. Your progress is automatically saved to your account.",
+        "Can\u2019t find what you need? Your assigned mentor or manager is ready to provide 1:1 support.",
+    ],
 }
 
 # ── Default seed data (mirrors initialPhases in the frontend) ─────────────────
