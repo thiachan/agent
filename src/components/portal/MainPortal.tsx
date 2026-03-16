@@ -156,7 +156,7 @@ export function MainPortal() {
             className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-400 hover:to-blue-500 transition-all font-medium shadow-lg shadow-cyan-500/30 text-sm"
           >
             <Plus className="w-4 h-4" />
-            <span>New chat</span>
+            <span>New AGENT</span>
           </button>
         </div>
 
@@ -172,7 +172,7 @@ export function MainPortal() {
               }`}
             >
               <MessageSquare className="w-5 h-5" />
-              <span>Chat</span>
+              <span>AGENT</span>
             </button>
             <button
               onClick={() => setActiveView('bookmarks')}
@@ -239,11 +239,11 @@ export function MainPortal() {
         {/* Recent Chats - Scrollable */}
         <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
           <h2 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            Recent chats
+            Recent AGENTs
           </h2>
           <div className="space-y-2">
             {recentChats.length === 0 ? (
-              <p className="text-xs text-gray-500 text-center py-4">No recent chats</p>
+              <p className="text-xs text-gray-500 text-center py-4">No recent AGENTs</p>
             ) : (
               recentChats.map((chat) => (
                 <div
@@ -260,7 +260,7 @@ export function MainPortal() {
                   >
                     <span className="text-base mt-0.5 flex-shrink-0">{getModelEmoji(chat.model_name)}</span>
                     <div className="flex-1 min-w-0 text-left">
-                      <p className="text-xs font-medium truncate text-left">{chat.title || 'New chat'}</p>
+                      <p className="text-xs font-medium truncate text-left">{chat.title || 'New AGENT'}</p>
                       <p className="text-[10px] text-gray-500 mt-1 text-left">{formatDate(chat.updated_at)}</p>
                     </div>
                     {selectedChatId === chat.id && (
