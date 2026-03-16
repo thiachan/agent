@@ -44,9 +44,8 @@ jobs:
 
       - name: Build and push backend
         id: push
-        env:
-          ECR_BACKEND: ${{ secrets.ECR_BACKEND_CA }}
         run: |
+          ECR_BACKEND="978027421922.dkr.ecr.ca-central-1.amazonaws.com/agent-prod-ca-backend"
           SHORT_SHA="${GITHUB_SHA::8}"
           docker build \
             --file backend/Dockerfile \
@@ -79,9 +78,8 @@ jobs:
 
       - name: Build and push frontend
         id: push
-        env:
-          ECR_FRONTEND: ${{ secrets.ECR_FRONTEND_CA }}
         run: |
+          ECR_FRONTEND="978027421922.dkr.ecr.ca-central-1.amazonaws.com/agent-prod-ca-frontend"
           SHORT_SHA="${GITHUB_SHA::8}"
           docker build \
             --file Dockerfile \
