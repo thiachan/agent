@@ -7,8 +7,8 @@ import { ThemeApplier } from '@/components/providers/ThemeApplier'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'AI Intranet',
-  description: 'Enterprise-grade AI-powered intranet platform',
+  title: 'Cisco AGENT',
+  description: 'AI for GSSO Engineering Team',
 }
 
 export default function RootLayout({
