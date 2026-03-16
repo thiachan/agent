@@ -155,7 +155,7 @@ jobs:
           fi
           echo "ALB: $ALB"
           for i in {1..8}; do
-            STATUS=$(curl -sSo /dev/null -w "%{http_code}" -L "https://${ALB}/health" || echo "000")
+            STATUS=$(curl -sSo /dev/null -w "%{http_code}" "http://${ALB}/health" || echo "000")
             [[ "$STATUS" == "200" || "$STATUS" == "301" || "$STATUS" == "302" ]] && { echo "✅ Backend healthy (HTTP $STATUS)"; exit 0; }
             echo "Attempt $i: HTTP $STATUS — waiting 15s..."
             sleep 15
