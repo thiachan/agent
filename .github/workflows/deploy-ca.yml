@@ -26,19 +26,18 @@ jobs:
   # ── 1. Build backend ─────────────────────────────────────────────────────────
   build-backend:
     name: Build & Push Backend → ECR ca-central-1
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, agent-prod-ca]
     outputs:
       image: ${{ steps.push.outputs.image }}
 
     steps:
       - uses: actions/checkout@v4
 
+      # Runner EC2 has an IAM instance profile — no static keys needed
       - name: Configure AWS credentials (ca-central-1)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID_CA }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_CA }}
-          aws-region:            ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -62,19 +61,18 @@ jobs:
   # ── 2. Build frontend ────────────────────────────────────────────────────────
   build-frontend:
     name: Build & Push Frontend → ECR ca-central-1
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, agent-prod-ca]
     outputs:
       image: ${{ steps.push.outputs.image }}
 
     steps:
       - uses: actions/checkout@v4
 
+      # Runner EC2 has an IAM instance profile — no static keys needed
       - name: Configure AWS credentials (ca-central-1)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID_CA }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_CA }}
-          aws-region:            ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -100,7 +98,7 @@ jobs:
   # ── 3. Deploy to EKS ─────────────────────────────────────────────────────────
   deploy:
     name: Rolling deploy → EKS ca-central-1
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, agent-prod-ca]
     needs: [build-backend, build-frontend]
     environment: production-ca
     if: ${{ github.event.inputs.skip_deploy != 'true' }}
@@ -108,12 +106,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Runner EC2 has an IAM instance profile — no static keys needed
       - name: Configure AWS credentials (ca-central-1)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID_CA }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_CA }}
-          aws-region:            ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
