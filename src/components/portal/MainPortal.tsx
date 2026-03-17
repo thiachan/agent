@@ -134,7 +134,7 @@ export function MainPortal() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <Image 
-                src="/gsse_logo.png" 
+                src="/gsse_logo_new.png" 
                 alt="GSSO Logo" 
                 width={44} 
                 height={44} 
