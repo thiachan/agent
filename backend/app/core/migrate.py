@@ -43,14 +43,16 @@ def run_migrations() -> None:
         try:
             raw.set_isolation_level(0)  # psycopg2 ISOLATION_LEVEL_AUTOCOMMIT
             cur = raw.cursor()
+            # SQLAlchemy uses enum member NAMES (not values) as DB labels,
+            # so we must add 'LEADER' (uppercase name), not 'leader' (value).
             cur.execute(
-                "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'leader'"
+                "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'LEADER'"
             )
             cur.execute(
-                "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'manager'"
+                "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'MANAGER'"
             )
             cur.close()
-            logger.info("migrate: userrole enum ensured to contain 'leader' and 'manager'")
+            logger.info("migrate: userrole enum ensured to contain 'LEADER' and 'MANAGER'")
         except Exception as exc:
             logger.error(f"migrate: failed to alter userrole enum: {exc}", exc_info=True)
         finally:
