@@ -31,16 +31,30 @@ def run_migrations() -> None:
     if is_postgres:
         # ── 2. Add enum values (PostgreSQL only) ──────────────────────────────
         # CRITICAL: ALTER TYPE ... ADD VALUE cannot run inside a transaction
-        # block in PostgreSQL. We must use AUTOCOMMIT isolation for these
-        # statements before opening the main DDL transaction below.
-        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as ac:
-            ac.execute(text(
+        # block in PostgreSQL.
+        #
+        # We use a raw DBAPI connection with autocommit=True so there is
+        # absolutely no implicit BEGIN wrapping these statements.  The
+        # engine-level execution_options approach can still open a
+        # transaction internally in some SQLAlchemy versions, but obtaining
+        # a raw_connection() and toggling autocommit at the DBAPI level is
+        # always reliable.
+        raw = engine.raw_connection()
+        try:
+            raw.set_isolation_level(0)  # psycopg2 ISOLATION_LEVEL_AUTOCOMMIT
+            cur = raw.cursor()
+            cur.execute(
                 "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'leader'"
-            ))
-            ac.execute(text(
+            )
+            cur.execute(
                 "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'manager'"
-            ))
-        logger.info("migrate: userrole enum ensured to contain 'leader' and 'manager'")
+            )
+            cur.close()
+            logger.info("migrate: userrole enum ensured to contain 'leader' and 'manager'")
+        except Exception as exc:
+            logger.error(f"migrate: failed to alter userrole enum: {exc}", exc_info=True)
+        finally:
+            raw.close()
 
     if is_postgres:
         with engine.begin() as conn:
