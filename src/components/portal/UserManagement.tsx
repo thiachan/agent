@@ -112,6 +112,8 @@ export function UserManagement() {
         return 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
       case 'hr':
         return 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+      case 'leader':
+        return 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
       default:
         return 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
     }
@@ -187,6 +189,7 @@ export function UserManagement() {
           <option value="all">All Roles</option>
           <option value="admin">Admin</option>
           <option value="manager">Manager</option>
+          <option value="leader">Leader</option>
           <option value="engineer">Engineer</option>
           <option value="hr">HR</option>
           <option value="employee">Employee</option>
@@ -290,12 +293,15 @@ export function UserManagement() {
                           ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
                           : user.role === 'hr'
                           ? 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+                          : user.role === 'leader'
+                          ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
                           : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
                       }`}
                       style={{ backgroundColor: 'transparent' }}
                     >
                       <option value="admin" className="bg-slate-800 text-red-400">Admin</option>
                       <option value="manager" className="bg-slate-800 text-orange-400">Manager</option>
+                      <option value="leader" className="bg-slate-800 text-cyan-400">Leader</option>
                       <option value="engineer" className="bg-slate-800 text-blue-400">Engineer</option>
                       <option value="hr" className="bg-slate-800 text-purple-400">HR</option>
                       <option value="employee" className="bg-slate-800 text-gray-400">Employee</option>
