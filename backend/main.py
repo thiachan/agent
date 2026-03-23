@@ -8,11 +8,14 @@ os.environ["CHROMA_TELEMETRY"] = "False"
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="pydub")
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import auth, documents, chat, agents, upload, generate, models, knowledge_bases, onboarding, bookmarks
 from app.models import onboarding as onboarding_model  # ensure table is registered
 from app.core.config import settings
+from app.core.migrate import run_migrations
 import logging
 
 # Configure logging
@@ -29,10 +32,22 @@ chromadb_logger = logging.getLogger("chromadb.telemetry")
 chromadb_logger.setLevel(logging.CRITICAL)
 chromadb_logger.disabled = True
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Run DB migrations on startup (idempotent — safe every restart)
+    try:
+        run_migrations()
+    except Exception as exc:
+        logger.error(f"Startup migration error: {exc}", exc_info=True)
+    yield
+
+
 app = FastAPI(
     title="GSSO AI Center API",
     description="GSSO AI-Powered Enterprise Platform Backend",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware - explicitly allow Authorization header
