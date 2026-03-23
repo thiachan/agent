@@ -23,26 +23,28 @@ def run_migrations() -> None:
     """Apply all pending schema migrations."""
     is_postgres = "postgresql" in str(engine.url)
 
-    with engine.begin() as conn:
-        # ── 1. Ensure all SQLAlchemy-mapped tables exist ──────────────────────
-        # This is a no-op for tables that are already present.
-        Base.metadata.create_all(bind=engine)
-        logger.info("migrate: create_all complete")
+    # ── 1. Ensure all SQLAlchemy-mapped tables exist ──────────────────────────
+    # This is a no-op for tables that are already present.
+    Base.metadata.create_all(bind=engine)
+    logger.info("migrate: create_all complete")
 
-        if is_postgres:
-            # ── 2. Add 'leader' to the userrole enum (PostgreSQL only) ────────
-            # ALTER TYPE ... ADD VALUE is idempotent via IF NOT EXISTS (PG 9.3+)
-            conn.execute(text(
+    if is_postgres:
+        # ── 2. Add enum values (PostgreSQL only) ──────────────────────────────
+        # CRITICAL: ALTER TYPE ... ADD VALUE cannot run inside a transaction
+        # block in PostgreSQL. We must use AUTOCOMMIT isolation for these
+        # statements before opening the main DDL transaction below.
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as ac:
+            ac.execute(text(
                 "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'leader'"
             ))
-            logger.info("migrate: userrole enum ensured to contain 'leader'")
-
-            # ── 3. Add 'manager' to the userrole enum (safety) ────────────────
-            conn.execute(text(
+            ac.execute(text(
                 "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'manager'"
             ))
+        logger.info("migrate: userrole enum ensured to contain 'leader' and 'manager'")
 
-            # ── 4. Ensure new onboarding tables exist ─────────────────────────
+    if is_postgres:
+        with engine.begin() as conn:
+            # ── 3. Ensure new onboarding tables exist ─────────────────────────
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS manager_playbooks (
                     id          SERIAL PRIMARY KEY,
