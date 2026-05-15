@@ -26,7 +26,11 @@ class Settings(BaseSettings):
     CISCO_ENDPOINT: str = os.getenv("CISCO_ENDPOINT", "https://chat-ai.cisco.com/openai/deployments/gpt-4.1/chat/completions")
     CISCO_DEPLOYMENT: str = os.getenv("CISCO_DEPLOYMENT", "")  # Optional: override deployment name (e.g., "gpt-4.1")
     CISCO_APPKEY: str = os.getenv("CISCO_APPKEY", "")  # Optional appkey for user field
-    
+
+    # Cisco DRIFT RAG (Incubation pipeline)
+    DRIFT_CLIENT_ID: str = os.getenv("DRIFT_CLIENT_ID", "")
+    DRIFT_CLIENT_SECRET: str = os.getenv("DRIFT_CLIENT_SECRET", "")
+
     # AWS Bedrock (optional - only if using Bedrock models)
     AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
     AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
