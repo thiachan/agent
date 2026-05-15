@@ -1,8 +1,12 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronUp, FileText, AlertCircle, FlaskConical } from 'lucide-react'
+import { Send, Loader2, FileText, RefreshCw, FlaskConical } from 'lucide-react'
 import api from '@/lib/api'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Phase = 'topic_select' | 'prequalify' | 'discovery' | 'chat'
 
 interface SourceDoc {
   content?: string
@@ -12,77 +16,178 @@ interface SourceDoc {
 
 interface Message {
   id: number
-  role: 'user' | 'assistant'
+  role: 'bot' | 'user'
   content: string
+  options?: string[]
   sources?: SourceDoc[]
   error?: boolean
 }
 
-export function Incubation() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [showFilters, setShowFilters] = useState(false)
-  const [filterKey, setFilterKey] = useState('')
-  const [filterValue, setFilterValue] = useState('')
-  const [filters, setFilters] = useState<Record<string, string>>({})
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-  const msgId = useRef(0)
+// ─── Conversation config ──────────────────────────────────────────────────────
 
+const TOPICS = ['Sales', 'Demo', 'Support', 'License', 'Customer Qualify', 'Other']
+
+const PREQUALIFY: Record<string, Array<{ q: string; options: string[] }>> = {
+  Sales: [
+    { q: "What is the customer's primary use case?", options: ['Shadow AI / AI Access', 'AI App Security', 'Both'] },
+    { q: 'Which region / theater?', options: ['Americas', 'EMEA', 'APJC'] },
+    { q: 'What is the project type?', options: ['New Logo', 'Expansion / Upsell', 'Renewal'] },
+  ],
+  Demo: [
+    { q: 'Which product area to demo?', options: ['AI Access', 'AI Validation', 'AI Runtime Protection', 'Full AI Defense'] },
+    { q: 'Who is the target audience?', options: ['CISO / CIO', 'Security Team', 'AI / Dev Team', 'Executive'] },
+    { q: 'What is the demo timeline?', options: ['This week', 'Within 2 weeks', 'Within a month'] },
+  ],
+  Support: [
+    { q: 'Which product is affected?', options: ['AI Access', 'AI Validation', 'AI Runtime Protection', 'Other'] },
+    { q: 'What is the severity?', options: ['Critical – production down', 'High – major impact', 'Medium', 'Low'] },
+    { q: 'Is this customer-facing or internal?', options: ['Customer-facing', 'Internal'] },
+  ],
+  License: [
+    { q: 'Which license tier?', options: ['Validation Essentials', 'Runtime Essentials', 'Advantage', 'AI Access only'] },
+    { q: 'How many AI apps to protect?', options: ['1–5', '6–20', '21–50', '50+'] },
+    { q: 'New purchase or renewal?', options: ['New purchase', 'Renewal', 'Upgrade'] },
+  ],
+  'Customer Qualify': [
+    { q: 'Does the customer have AI apps in production or development?', options: ['Yes – in production', 'In development', 'Planning stage', 'Not yet'] },
+    { q: 'Does a security team own AI governance?', options: ['Yes', 'In progress', 'No'] },
+    { q: 'Budget signal?', options: ['Confirmed budget', 'Budget discussion ongoing', 'No budget yet'] },
+  ],
+  Other: [
+    { q: 'What best describes your request?', options: ['Partner enablement', 'Competitive intel', 'Pricing question', "Other – I'll describe below"] },
+  ],
+}
+
+const DISCOVERY: Array<{ key: string; q: string }> = [
+  { key: 'account', q: 'What is the account name?' },
+  { key: 'contact', q: 'Contact name and title?' },
+  { key: 'region',  q: 'Location / region?' },
+  { key: 'sfdc',    q: 'SFDC Opportunity ID (or N/A)?' },
+  { key: 'need',    q: 'What specifically do you need from the Incubation SE?' },
+]
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function Incubation() {
+  const [messages, setMessages]             = useState<Message[]>([])
+  const [phase, setPhase]                   = useState<Phase>('topic_select')
+  const [topic, setTopic]                   = useState<string | null>(null)
+  const [prequalifyStep, setPrequalifyStep] = useState(0)
+  const [discoveryStep, setDiscoveryStep]   = useState(0)
+  const [discoveryAnswers, setDiscoveryAnswers] = useState<Record<string, string>>({})
+  const [input, setInput]                   = useState('')
+  const [loading, setLoading]               = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef  = useRef<HTMLTextAreaElement>(null)
+  const msgId     = useRef(0)
+
+  const nextId  = () => ++msgId.current
+  const pushBot = (content: string, options?: string[]) =>
+    setMessages(prev => [...prev, { id: nextId(), role: 'bot', content, options }])
+  const pushUser = (content: string) =>
+    setMessages(prev => [...prev, { id: nextId(), role: 'user', content }])
+
+  // Initial greeting on mount
+  useEffect(() => {
+    pushBot(
+      "Hello! I'm the Incubation Bot for Cisco AI Defense.\n\nNote: I am powered by AI. Please verify accuracy before sharing results with customers.\n\nHow can I help you today? Please choose a topic:",
+      TOPICS
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, loading])
 
-  const addFilter = () => {
-    const k = filterKey.trim()
-    const v = filterValue.trim()
-    if (!k || !v) return
-    setFilters(prev => ({ ...prev, [k]: v }))
-    setFilterKey('')
-    setFilterValue('')
+  // ── conversation flow helpers ─────────────────────────────────────────────
+
+  const startPrequalify = (selectedTopic: string) => {
+    const qs = PREQUALIFY[selectedTopic]
+    pushBot(`Great, let's qualify this **${selectedTopic}** request.\n\n${qs[0].q}`, qs[0].options)
+    setPhase('prequalify')
+    setTopic(selectedTopic)
+    setPrequalifyStep(0)
   }
 
-  const removeFilter = (key: string) => {
-    setFilters(prev => {
-      const next = { ...prev }
-      delete next[key]
-      return next
-    })
+  const advancePrequalify = (currentStep: number, currentTopic: string) => {
+    const qs = PREQUALIFY[currentTopic]
+    const next = currentStep + 1
+    if (next < qs.length) {
+      pushBot(qs[next].q, qs[next].options)
+      setPrequalifyStep(next)
+    } else {
+      pushBot(`Perfect — pre-qualification complete.\n\nNow I need a few account details.\n\n${DISCOVERY[0].q}`)
+      setPhase('discovery')
+      setDiscoveryStep(0)
+    }
   }
 
-  const sendMessage = async () => {
-    const query = input.trim()
-    if (!query || loading) return
+  const advanceDiscovery = (answer: string, currentStep: number) => {
+    const key = DISCOVERY[currentStep].key
+    const updated = { ...discoveryAnswers, [key]: answer }
+    setDiscoveryAnswers(updated)
+    const next = currentStep + 1
+    if (next < DISCOVERY.length) {
+      pushBot(DISCOVERY[next].q)
+      setDiscoveryStep(next)
+    } else {
+      pushBot(
+        `All set! Here's what I've captured:\n` +
+        `• Account: ${updated.account}\n` +
+        `• Contact: ${updated.contact}\n` +
+        `• Region: ${updated.region}\n` +
+        `• SFDC: ${updated.sfdc}\n` +
+        `• Need: ${updated.need}\n\n` +
+        `Feel free to ask me anything about Cisco AI Defense — I'll search the knowledge base for you.`
+      )
+      setPhase('chat')
+    }
+  }
 
-    const userMsg: Message = { id: ++msgId.current, role: 'user', content: query }
-    setMessages(prev => [...prev, userMsg])
+  // ── user interactions ─────────────────────────────────────────────────────
+
+  const dismissOptions = () =>
+    setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, options: undefined } : m))
+
+  const handleTopicSelect = (opt: string) => {
+    dismissOptions()
+    pushUser(opt)
+    startPrequalify(opt)
+  }
+
+  const handleQuickReply = (opt: string) => {
+    dismissOptions()
+    pushUser(opt)
+    if (phase === 'prequalify' && topic) advancePrequalify(prequalifyStep, topic)
+  }
+
+  const handleSend = async () => {
+    const text = input.trim()
+    if (!text || loading) return
     setInput('')
+    dismissOptions()
+    pushUser(text)
+
+    if (phase === 'prequalify' && topic) { advancePrequalify(prequalifyStep, topic); return }
+    if (phase === 'discovery') { advanceDiscovery(text, discoveryStep); return }
+
+    // phase === 'chat' — DRIFT query
     setLoading(true)
-
     try {
-      const body: { query: string; meta_filters?: Record<string, string> } = { query }
-      if (Object.keys(filters).length > 0) body.meta_filters = filters
-
-      const resp = await api.post('/api/incubation/search', body)
+      const resp = await api.post('/api/incubation/search', { query: text })
       const data = resp.data
-
-      const assistantMsg: Message = {
-        id: ++msgId.current,
-        role: 'assistant',
+      setMessages(prev => [...prev, {
+        id: nextId(), role: 'bot',
         content: data.answer || 'No answer returned.',
         sources: data.sources || [],
-      }
-      setMessages(prev => [...prev, assistantMsg])
+      }])
     } catch (err: unknown) {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        (err as Error)?.message ||
-        'Something went wrong.'
-      setMessages(prev => [
-        ...prev,
-        { id: ++msgId.current, role: 'assistant', content: detail, error: true },
-      ])
+        (err as Error)?.message || 'Something went wrong.'
+      setMessages(prev => [...prev, { id: nextId(), role: 'bot', content: detail, error: true }])
     } finally {
       setLoading(false)
       inputRef.current?.focus()
@@ -90,186 +195,141 @@ export function Incubation() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
+
+  const handleReset = () => {
+    setMessages([])
+    setPhase('topic_select')
+    setTopic(null)
+    setPrequalifyStep(0)
+    setDiscoveryStep(0)
+    setDiscoveryAnswers({})
+    setInput('')
+    setTimeout(() => pushBot(
+      "Hello! I'm the Incubation Bot for Cisco AI Defense.\n\nNote: I am powered by AI. Please verify accuracy before sharing results with customers.\n\nHow can I help you today? Please choose a topic:",
+      TOPICS
+    ), 50)
+  }
+
+  const placeholder = phase === 'chat'
+    ? 'Ask about AI Defense, battlecards, competitor positioning…'
+    : 'Type your answer, or click an option above…'
+
+  // ── render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full bg-[#07182D]">
+
       {/* Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-slate-700/50 bg-slate-800/40">
+      <div className="flex-shrink-0 px-5 py-3 border-b border-slate-700/50 bg-slate-900/60 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow-lg shadow-violet-500/30">
-            <FlaskConical className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center shadow shadow-violet-700/40">
+            <FlaskConical className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h1 className="text-base font-semibold text-white">Incubation Bot</h1>
-            <p className="text-xs text-gray-400">Cisco AI Defense · DRIFT RAG · Granite Reranker</p>
+            <p className="text-sm font-semibold text-white leading-tight">Incubation Bot</p>
+            <p className="text-[10px] text-gray-400">Cisco AI Defense · DRIFT RAG · Granite Reranker</p>
           </div>
         </div>
+        <button
+          onClick={handleReset}
+          title="Start new conversation"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-slate-700/50 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Metadata filters bar */}
-      <div className="flex-shrink-0 border-b border-slate-700/30 bg-slate-800/20">
-        <button
-          onClick={() => setShowFilters(v => !v)}
-          className="w-full flex items-center justify-between px-6 py-2 text-xs text-gray-400 hover:text-white transition-colors"
-        >
-          <span className="flex items-center space-x-2">
-            <span>Metadata Filters</span>
-            {Object.keys(filters).length > 0 && (
-              <span className="bg-violet-600 text-white rounded-full px-2 py-0.5 text-[10px]">
-                {Object.keys(filters).length}
-              </span>
-            )}
-          </span>
-          {showFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </button>
-
-        {showFilters && (
-          <div className="px-6 pb-3 space-y-2">
-            {/* Active filters */}
-            {Object.entries(filters).length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                {Object.entries(filters).map(([k, v]) => (
-                  <span
-                    key={k}
-                    className="flex items-center space-x-1 bg-violet-600/20 border border-violet-500/30 text-violet-300 rounded-full px-2.5 py-0.5 text-xs"
-                  >
-                    <span>{k}: {v}</span>
-                    <button
-                      onClick={() => removeFilter(k)}
-                      className="ml-1 hover:text-white"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            {/* Add filter */}
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={filterKey}
-                onChange={e => setFilterKey(e.target.value)}
-                placeholder="key (e.g. department)"
-                className="flex-1 bg-slate-700/50 border border-slate-600/50 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
-              />
-              <input
-                type="text"
-                value={filterValue}
-                onChange={e => setFilterValue(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addFilter()}
-                placeholder="value"
-                className="flex-1 bg-slate-700/50 border border-slate-600/50 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
-              />
-              <button
-                onClick={addFilter}
-                className="px-3 py-1.5 bg-violet-600/80 hover:bg-violet-600 text-white text-xs rounded-lg transition-colors"
-              >
-                Add
-              </button>
-            </div>
-          </div>
-        )}
+      {/* Info banner */}
+      <div className="flex-shrink-0 bg-blue-900/30 border-b border-blue-700/30 px-5 py-2">
+        <p className="text-[11px] text-blue-300">
+          AI-generated content — verify accuracy and completeness before sharing with customers.
+        </p>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 min-h-0">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center space-y-3">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-700/20 border border-violet-500/20 flex items-center justify-center">
-              <FlaskConical className="w-8 h-8 text-violet-400" />
-            </div>
-            <p className="text-white font-medium">Ask the Incubation Bot</p>
-            <p className="text-gray-400 text-sm max-w-sm">
-              Query the AI Defense knowledge base — battlecards, FAQs, discovery packets, and more.
-            </p>
-          </div>
-        )}
+      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4 min-h-0">
+        {messages.map((msg, idx) => (
+          <div key={msg.id}>
+            <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
 
-        {messages.map(msg => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {msg.role === 'user' ? (
-              <div className="max-w-[70%] bg-gradient-to-br from-violet-600/80 to-purple-700/80 text-white rounded-2xl rounded-tr-sm px-4 py-3 text-sm shadow-lg shadow-violet-900/30">
-                {msg.content}
-              </div>
-            ) : (
-              <div className="max-w-[85%] space-y-3">
-                {/* Answer bubble */}
-                <div
-                  className={`rounded-2xl rounded-tl-sm px-4 py-3 text-sm shadow-md ${
+              {msg.role === 'user' ? (
+                <div className="max-w-[72%] bg-gradient-to-br from-violet-600/90 to-purple-700/90 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm shadow shadow-violet-900/30 whitespace-pre-wrap">
+                  {msg.content}
+                </div>
+              ) : (
+                <div className="max-w-[82%] space-y-3">
+
+                  {/* Bot bubble */}
+                  <div className={`rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap shadow ${
                     msg.error
                       ? 'bg-red-900/30 border border-red-500/30 text-red-300'
-                      : 'bg-slate-800/80 border border-slate-700/50 text-gray-100'
-                  }`}
-                >
-                  {msg.error && (
-                    <div className="flex items-center space-x-2 mb-1">
-                      <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                      <span className="text-xs text-red-400 font-medium">Error</span>
+                      : 'bg-slate-800/80 border border-slate-700/40 text-gray-100'
+                  }`}>
+                    {msg.content}
+                  </div>
+
+                  {/* Quick-reply buttons — only on last message */}
+                  {msg.options && idx === messages.length - 1 && (
+                    <div className="flex flex-col space-y-2 pl-1">
+                      {msg.options.map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => phase === 'topic_select' ? handleTopicSelect(opt) : handleQuickReply(opt)}
+                          className="text-left px-4 py-2 rounded-full border border-violet-500/50 text-violet-300 hover:bg-violet-600/20 hover:border-violet-400 hover:text-white transition-all text-sm w-fit"
+                        >
+                          {opt}
+                        </button>
+                      ))}
                     </div>
                   )}
-                  <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
-                </div>
 
-                {/* Sources */}
-                {msg.sources && msg.sources.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[10px] uppercase tracking-wider text-gray-500 px-1">Sources</p>
-                    {msg.sources.map((src, i) => (
-                      <div
-                        key={i}
-                        className="bg-slate-800/50 border border-slate-700/40 rounded-xl px-3 py-2.5 space-y-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-1.5">
-                            <FileText className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                            <span className="text-xs text-gray-300 truncate max-w-[300px]">
-                              {(src.metadata?.source as string) ||
-                                (src.metadata?.filename as string) ||
-                                (src.metadata?.file_name as string) ||
-                                `Source ${i + 1}`}
-                            </span>
-                          </div>
-                          {src.score != null && (
-                            <span
-                              className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
-                                src.score >= 0.8
-                                  ? 'bg-emerald-900/40 text-emerald-400'
-                                  : src.score >= 0.6
-                                  ? 'bg-yellow-900/40 text-yellow-400'
+                  {/* Sources */}
+                  {msg.sources && msg.sources.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 px-1">Sources</p>
+                      {msg.sources.map((src, i) => (
+                        <div key={i} className="bg-slate-800/50 border border-slate-700/40 rounded-xl px-3 py-2 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-1.5">
+                              <FileText className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                              <span className="text-xs text-gray-300 truncate max-w-[260px]">
+                                {(src.metadata?.source as string) ||
+                                  (src.metadata?.filename as string) ||
+                                  (src.metadata?.file_name as string) ||
+                                  `Source ${i + 1}`}
+                              </span>
+                            </div>
+                            {src.score != null && (
+                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
+                                src.score >= 0.8 ? 'bg-emerald-900/40 text-emerald-400'
+                                  : src.score >= 0.6 ? 'bg-yellow-900/40 text-yellow-400'
                                   : 'bg-slate-700/50 text-gray-400'
-                              }`}
-                            >
-                              {src.score.toFixed(3)}
-                            </span>
+                              }`}>
+                                {src.score.toFixed(3)}
+                              </span>
+                            )}
+                          </div>
+                          {src.content && (
+                            <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">{src.content}</p>
                           )}
                         </div>
-                        {src.content && (
-                          <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">
-                            {src.content}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                      ))}
+                    </div>
+                  )}
+
+                </div>
+              )}
+            </div>
           </div>
         ))}
 
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl rounded-tl-sm px-4 py-3">
-              <div className="flex items-center space-x-2 text-gray-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs">Searching knowledge base…</span>
-              </div>
+            <div className="bg-slate-800/80 border border-slate-700/40 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center space-x-2 text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-xs">Searching knowledge base…</span>
             </div>
           </div>
         )}
@@ -278,17 +338,18 @@ export function Incubation() {
       </div>
 
       {/* Input */}
-      <div className="flex-shrink-0 px-4 py-4 border-t border-slate-700/50 bg-slate-800/20">
-        <div className="flex items-end space-x-3">
+      <div className="flex-shrink-0 px-4 py-3 border-t border-slate-700/50 bg-slate-900/40">
+        <div className="flex items-end space-x-2">
           <textarea
             ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about AI Defense, battlecards, competitor positioning…"
+            placeholder={placeholder}
             rows={1}
-            className="flex-1 bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/50 resize-none leading-relaxed"
-            style={{ minHeight: '44px', maxHeight: '120px' }}
+            disabled={loading}
+            className="flex-1 bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/50 resize-none leading-relaxed disabled:opacity-50"
+            style={{ minHeight: '40px', maxHeight: '120px' }}
             onInput={e => {
               const el = e.currentTarget
               el.style.height = 'auto'
@@ -296,19 +357,16 @@ export function Incubation() {
             }}
           />
           <button
-            onClick={sendMessage}
+            onClick={handleSend}
             disabled={!input.trim() || loading}
-            className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-xl hover:from-violet-500 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-violet-900/30"
+            className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-gradient-to-br from-violet-600 to-purple-700 text-white rounded-xl hover:from-violet-500 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
-        <p className="text-[10px] text-gray-600 mt-2 px-1">Enter to send · Shift+Enter for new line</p>
+        <p className="text-[10px] text-gray-600 mt-1.5 px-1">Enter to send · Shift+Enter for new line</p>
       </div>
+
     </div>
   )
 }
