@@ -57,8 +57,14 @@ def _get_cisco_token() -> str:
     return token
 
 
+class HistoryMessage(BaseModel):
+    role: str   # 'user' | 'bot'
+    content: str
+
+
 class IncubationSearchRequest(BaseModel):
     query: str
+    history: Optional[List[HistoryMessage]] = None
     meta_filters: Optional[Dict[str, Any]] = None
 
 
@@ -114,6 +120,32 @@ async def incubation_search(
         "k": 5,
         "min_score": 0.5,
     }
+
+    # Build contextual system prompt from conversation history
+    base_prompt = (
+        "You are a concise Cisco AI Defense assistant for internal sales use. "
+        "Rules:\n"
+        "1. Answer ONLY what was asked — no preamble, no restatement of the question.\n"
+        "2. Be direct and specific. Use bullet points only when listing multiple distinct items.\n"
+        "3. Do NOT repeat information already given in the conversation.\n"
+        "4. Do NOT offer generic follow-up suggestions or ask 'would you like more info?'.\n"
+        "5. If the answer is not in the retrieved documents, say so in one sentence.\n"
+        "6. Cite the source document name inline (e.g. [FAQ]) where relevant."
+    )
+
+    if request.history:
+        recent = request.history[-6:]  # last 3 exchanges
+        history_text = "\n".join(
+            f"{('User' if m.role == 'user' else 'Assistant')}: {m.content[:400]}"
+            for m in recent
+        )
+        payload["prompt"] = (
+            f"{base_prompt}\n\n"
+            f"Recent conversation:\n{history_text}\n\n"
+            "Answer the user's latest question using the context above and the retrieved documents."
+        )
+    else:
+        payload["prompt"] = base_prompt
 
     if request.meta_filters:
         payload["meta_filters"] = request.meta_filters

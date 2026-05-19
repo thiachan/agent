@@ -6,7 +6,7 @@ import api from '@/lib/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = 'topic_select' | 'prequalify' | 'discovery' | 'chat'
+type Phase = 'topic_select' | 'prequalify' | 'discovery' | 'discovery_need' | 'chat'
 
 interface SourceDoc {
   content?: string
@@ -58,13 +58,21 @@ const PREQUALIFY: Record<string, Array<{ q: string; options: string[] }>> = {
   ],
 }
 
-const DISCOVERY: Array<{ key: string; q: string }> = [
+const DISCOVERY_BASE: Array<{ key: string; q: string }> = [
   { key: 'account', q: 'What is the account name?' },
   { key: 'contact', q: 'Contact name and title?' },
   { key: 'region',  q: 'Location / region?' },
   { key: 'sfdc',    q: 'SFDC Opportunity ID (or N/A)?' },
-  { key: 'need',    q: 'What specifically do you need from the Incubation SE?' },
 ]
+
+const TOPIC_NEED_QUESTION: Record<string, string> = {
+  Sales:              'What specific sales support or objection are you trying to address? I\'ll search the knowledge base for you.',
+  Demo:               'What specific demo scenario or asset do you need? I\'ll search the knowledge base for you.',
+  Support:            'Describe the issue in detail — what exactly do you need help resolving? I\'ll search the knowledge base for you.',
+  License:            'What specifically do you need to know about licensing or packaging? I\'ll search the knowledge base for you.',
+  'Customer Qualify': 'What specific qualification criteria or objections are you trying to address? I\'ll search the knowledge base for you.',
+  Other:              'Describe what you need — I\'ll search the knowledge base for you.',
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -73,8 +81,10 @@ export function Incubation() {
   const [phase, setPhase]                   = useState<Phase>('topic_select')
   const [topic, setTopic]                   = useState<string | null>(null)
   const [prequalifyStep, setPrequalifyStep] = useState(0)
+  const [prequalifyAnswers, setPrequalifyAnswers] = useState<string[]>([])
   const [discoveryStep, setDiscoveryStep]   = useState(0)
   const [discoveryAnswers, setDiscoveryAnswers] = useState<Record<string, string>>({})
+  const [contextPrefix, setContextPrefix]   = useState('')
   const [input, setInput]                   = useState('')
   const [loading, setLoading]               = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -111,72 +121,30 @@ export function Incubation() {
     setPrequalifyStep(0)
   }
 
-  const advancePrequalify = (currentStep: number, currentTopic: string) => {
+  const advancePrequalify = (currentStep: number, currentTopic: string, answer: string) => {
+    setPrequalifyAnswers(prev => [...prev, answer])
     const qs = PREQUALIFY[currentTopic]
     const next = currentStep + 1
     if (next < qs.length) {
       pushBot(qs[next].q, qs[next].options)
       setPrequalifyStep(next)
     } else {
-      pushBot(`Perfect — pre-qualification complete.\n\nNow I need a few account details.\n\n${DISCOVERY[0].q}`)
+      pushBot(`Perfect — pre-qualification complete.\n\nNow I need a few account details.\n\n${DISCOVERY_BASE[0].q}`)
       setPhase('discovery')
       setDiscoveryStep(0)
     }
   }
 
-  const advanceDiscovery = (answer: string, currentStep: number) => {
-    const key = DISCOVERY[currentStep].key
-    const updated = { ...discoveryAnswers, [key]: answer }
-    setDiscoveryAnswers(updated)
-    const next = currentStep + 1
-    if (next < DISCOVERY.length) {
-      pushBot(DISCOVERY[next].q)
-      setDiscoveryStep(next)
-    } else {
-      pushBot(
-        `All set! Here's what I've captured:\n` +
-        `• Account: ${updated.account}\n` +
-        `• Contact: ${updated.contact}\n` +
-        `• Region: ${updated.region}\n` +
-        `• SFDC: ${updated.sfdc}\n` +
-        `• Need: ${updated.need}\n\n` +
-        `Feel free to ask me anything about Cisco AI Defense — I'll search the knowledge base for you.`
-      )
-      setPhase('chat')
-    }
-  }
-
-  // ── user interactions ─────────────────────────────────────────────────────
-
-  const dismissOptions = () =>
-    setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, options: undefined } : m))
-
-  const handleTopicSelect = (opt: string) => {
-    dismissOptions()
-    pushUser(opt)
-    startPrequalify(opt)
-  }
-
-  const handleQuickReply = (opt: string) => {
-    dismissOptions()
-    pushUser(opt)
-    if (phase === 'prequalify' && topic) advancePrequalify(prequalifyStep, topic)
-  }
-
-  const handleSend = async () => {
-    const text = input.trim()
-    if (!text || loading) return
-    setInput('')
-    dismissOptions()
-    pushUser(text)
-
-    if (phase === 'prequalify' && topic) { advancePrequalify(prequalifyStep, topic); return }
-    if (phase === 'discovery') { advanceDiscovery(text, discoveryStep); return }
-
-    // phase === 'chat' — DRIFT query
+  const queryDrift = async (query: string) => {
     setLoading(true)
     try {
-      const resp = await api.post('/api/incubation/search', { query: text })
+      // Send last 6 messages as history so DRIFT has conversation context
+      const history = messages
+        .filter(m => m.role === 'user' || (m.role === 'bot' && !m.error && m.content.length > 10))
+        .slice(-6)
+        .map(m => ({ role: m.role, content: m.content.slice(0, 400) }))
+
+      const resp = await api.post('/api/incubation/search', { query, history })
       const data = resp.data
       setMessages(prev => [...prev, {
         id: nextId(), role: 'bot',
@@ -194,6 +162,66 @@ export function Incubation() {
     }
   }
 
+  const advanceDiscovery = (answer: string, currentStep: number, currentTopic: string) => {
+    const key = DISCOVERY_BASE[currentStep].key
+    const updated = { ...discoveryAnswers, [key]: answer }
+    setDiscoveryAnswers(updated)
+    const next = currentStep + 1
+    if (next < DISCOVERY_BASE.length) {
+      pushBot(DISCOVERY_BASE[next].q)
+      setDiscoveryStep(next)
+    } else {
+      // Last step: ask the topic-specific question then immediately fire DRIFT on the answer
+      const needQ = TOPIC_NEED_QUESTION[currentTopic] || 'What do you need help with? I\'ll search the knowledge base.'
+      pushBot(needQ)
+      setPhase('discovery_need')
+    }
+  }
+
+  // ── user interactions ─────────────────────────────────────────────────────
+
+  const dismissOptions = () =>
+    setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, options: undefined } : m))
+
+  const handleTopicSelect = (opt: string) => {
+    dismissOptions()
+    pushUser(opt)
+    startPrequalify(opt)
+  }
+
+  const handleQuickReply = (opt: string) => {
+    dismissOptions()
+    pushUser(opt)
+    if (phase === 'prequalify' && topic) advancePrequalify(prequalifyStep, topic, opt)
+  }
+
+  const handleSend = async () => {
+    const text = input.trim()
+    if (!text || loading) return
+    setInput('')
+    dismissOptions()
+    pushUser(text)
+
+    if (phase === 'prequalify' && topic) { advancePrequalify(prequalifyStep, topic, text); return }
+    if (phase === 'discovery' && topic) { advanceDiscovery(text, discoveryStep, topic); return }
+    if (phase === 'discovery_need') {
+      // Build context prefix from topic + prequalify answers — stored for all subsequent queries
+      const qs = topic ? PREQUALIFY[topic] : []
+      const contextParts = [
+        topic ? `Topic: ${topic}` : '',
+        ...qs.map((q, i) => prequalifyAnswers[i] ? `${q.q.replace(/\?$/, '')}: ${prequalifyAnswers[i]}` : ''),
+      ].filter(Boolean)
+      const prefix = contextParts.length ? `[Context: ${contextParts.join(' | ')}] ` : ''
+      setContextPrefix(prefix)
+      setPhase('chat')
+      queryDrift(prefix + text)
+      return
+    }
+
+    // phase === 'chat' — DRIFT query, always include context prefix
+    queryDrift(contextPrefix + text)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
@@ -203,8 +231,10 @@ export function Incubation() {
     setPhase('topic_select')
     setTopic(null)
     setPrequalifyStep(0)
+    setPrequalifyAnswers([])
     setDiscoveryStep(0)
     setDiscoveryAnswers({})
+    setContextPrefix('')
     setInput('')
     setTimeout(() => pushBot(
       "Hello! I'm the Incubation Bot for Cisco AI Defense.\n\nNote: I am powered by AI. Please verify accuracy before sharing results with customers.\n\nHow can I help you today? Please choose a topic:",
