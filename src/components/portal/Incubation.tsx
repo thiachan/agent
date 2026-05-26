@@ -6,7 +6,7 @@ import api from '@/lib/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = 'topic_select' | 'prequalify' | 'discovery' | 'discovery_need' | 'chat'
+type Phase = 'topic_select' | 'prequalify' | 'discovery' | 'discovery_combined' | 'discovery_need' | 'chat'
 
 interface SourceDoc {
   content?: string
@@ -64,6 +64,20 @@ const DISCOVERY_BASE: Array<{ key: string; q: string }> = [
   { key: 'region',  q: 'Location / region?' },
   { key: 'sfdc',    q: 'SFDC Opportunity ID (or N/A)?' },
 ]
+
+const POST_RESPONSE_OPTIONS = ['✅ End session', '💬 More questions', '🤝 Need SE assistance']
+
+function mapRegionToTeam(region: string): string {
+  const r = region.toLowerCase().trim()
+
+  if (/\b(asia|apac|apjc|anz|asean|oceania|pacific|australia|australian|new.?zealand|nz|japan|japanese|china|prc|mainland.?china|hong.?kong|hk|taiwan|korea|south.?korea|singapore|india|indonesia|malaysia|thailand|vietnam|philippines|pakistan|bangladesh|sri.?lanka|nepal|cambodia|myanmar|laos|brunei|mongolia|kazakhstan|uzbekistan|kyrgyzstan|tajikistan|turkmenistan|afghanistan)\b/.test(r))
+    return 'Asia'
+
+  if (/\b(europe|eu|emea|uk|u\.?k\.?|united.?kingdom|britain|great.?britain|england|scotland|wales|ireland|germany|france|spain|italy|netherlands|belgium|luxembourg|sweden|norway|denmark|finland|iceland|poland|czech|slovakia|hungary|romania|bulgaria|austria|switzerland|portugal|greece|estonia|latvia|lithuania|croatia|slovenia|serbia|bosnia|montenegro|albania|north.?macedonia|ukraine|belarus|moldova|russia|turkey|middle.?east|mea|uae|united.?arab.?emirates|saudi|saudi.?arabia|qatar|kuwait|oman|bahrain|israel|jordan|lebanon|egypt|morocco|tunisia|algeria|south.?africa|nigeria|kenya|ghana|ethiopia|tanzania|uganda|africa)\b/.test(r))
+    return 'Europe'
+
+  return 'Americas'
+}
 
 const TOPIC_NEED_QUESTION: Record<string, string> = {
   Sales:              'What specific sales support or objection are you trying to address? I\'ll search the knowledge base for you.',
@@ -129,9 +143,10 @@ export function Incubation() {
       pushBot(qs[next].q, qs[next].options)
       setPrequalifyStep(next)
     } else {
-      pushBot(`Perfect — pre-qualification complete.\n\nNow I need a few account details.\n\n${DISCOVERY_BASE[0].q}`)
-      setPhase('discovery')
-      setDiscoveryStep(0)
+      pushBot(
+        `Perfect — pre-qualification complete.\n\nNow I need a few account details. Please provide the following (one per line or comma-separated):\n\n• Account name\n• Contact name and title\n• Location / region\n• SFDC Opportunity ID (or N/A)`
+      )
+      setPhase('discovery_combined')
     }
   }
 
@@ -146,11 +161,13 @@ export function Incubation() {
 
       const resp = await api.post('/api/incubation/search', { query, history })
       const data = resp.data
-      setMessages(prev => [...prev, {
-        id: nextId(), role: 'bot',
-        content: data.answer || 'No answer returned.',
-        sources: data.sources || [],
-      }])
+      const answerId = nextId()
+      const followUpId = nextId()
+      setMessages(prev => [
+        ...prev,
+        { id: answerId, role: 'bot', content: data.answer || 'No answer returned.', sources: data.sources || [] },
+        { id: followUpId, role: 'bot', content: 'Was this helpful? What would you like to do next?', options: POST_RESPONSE_OPTIONS },
+      ])
     } catch (err: unknown) {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
@@ -192,7 +209,22 @@ export function Incubation() {
   const handleQuickReply = (opt: string) => {
     dismissOptions()
     pushUser(opt)
-    if (phase === 'prequalify' && topic) advancePrequalify(prequalifyStep, topic, opt)
+    if (phase === 'prequalify' && topic) { advancePrequalify(prequalifyStep, topic, opt); return }
+    // Post-response options
+    if (opt === '✅ End session') { handleReset(); return }
+    if (opt === '💬 More questions') {
+      pushBot('Sure — go ahead and ask your next question!')
+      return
+    }
+    if (opt === '🤝 Need SE assistance') {
+      const region = discoveryAnswers.region || ''
+      const team = mapRegionToTeam(region)
+      pushBot(
+        `Based on your location **${region || 'provided'}**, your request will be routed to the **${team} team**.\n\nAn SE will reach out to you via email shortly. Is there anything else I can help you with?`,
+        ['✅ End session', '💬 More questions']
+      )
+      return
+    }
   }
 
   const handleSend = async () => {
@@ -204,6 +236,18 @@ export function Incubation() {
 
     if (phase === 'prequalify' && topic) { advancePrequalify(prequalifyStep, topic, text); return }
     if (phase === 'discovery' && topic) { advanceDiscovery(text, discoveryStep, topic); return }
+    if (phase === 'discovery_combined' && topic) {
+      // Parse all 4 account fields from a single reply (split by newline or comma)
+      const parts = text.split(/\n|,/).map(s => s.trim()).filter(Boolean)
+      const keys = DISCOVERY_BASE.map(d => d.key)
+      const updated: Record<string, string> = {}
+      keys.forEach((k, i) => { updated[k] = parts[i] ?? '' })
+      setDiscoveryAnswers(updated)
+      const needQ = TOPIC_NEED_QUESTION[topic] || "What do you need help with? I'll search the knowledge base."
+      pushBot(needQ)
+      setPhase('discovery_need')
+      return
+    }
     if (phase === 'discovery_need') {
       // Build context prefix from topic + prequalify answers — stored for all subsequent queries
       const qs = topic ? PREQUALIFY[topic] : []

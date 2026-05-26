@@ -163,11 +163,12 @@ class ContentValidationRequest(BaseModel):
     json_content: str
     module_name: Optional[str] = None
     selected_sources: Optional[Union[str, List[str]]] = "CDC"
+    product_override: Optional[str] = None  # explicit product/solution filter (overrides auto-detected)
 
 
 class ValidationFinding(BaseModel):
     claim: str
-    status: str  # "validated", "needs_revision", "inaccurate"
+    status: str  # "validated", "needs_revision", "inaccurate", "unverified"
     exact_quote: Optional[str] = None
     cisco_answer: Optional[str] = None
     sources: List[Dict[str, Any]] = []
@@ -197,7 +198,7 @@ class ValidationJobResponse(BaseModel):
 _jobs: Dict[str, Dict[str, Any]] = {}
 
 
-async def _call_rag_api(query: str, user_email: str, max_retries: int = 3) -> Dict[str, Any]:
+async def _call_rag_api(query: str, user_email: str, max_retries: int = 3, product_filter: Optional[str] = None) -> Dict[str, Any]:
     """Helper to call Cisco RAG API asynchronously with retry logic for rate limits"""
     import asyncio
     
@@ -215,6 +216,14 @@ async def _call_rag_api(query: str, user_email: str, max_retries: int = 3) -> Di
             "Streaming": False,
             "HistoryWrite": False,
         }
+
+        # Attempt product-level filtering via AdditionalFilters.
+        # Cisco CDC indexes products under their short name (without "Cisco " prefix).
+        # Strip the prefix so "Cisco Security Cloud Control" → "Security Cloud Control".
+        if product_filter:
+            short_name = product_filter.removeprefix("Cisco ").strip()
+            payload["AdditionalFilters"] = {"product_families": [short_name]}
+            logger.debug(f"RAG product filter applied: {short_name}")
 
         try:
             async with httpx.AsyncClient() as client:
@@ -361,51 +370,119 @@ async def _run_validation(
     try:
         is_truncated = len(clean_content) < 100 or not clean_content.endswith('}')
 
+        # ─── Derive product context from fullname ─────────────────────────
+        # fullname pattern: "Product Family - Feature Name (Acronym)"
+        # Extract the product family (everything before the first " - ")
+        raw_fullname = parsed_data.get('fullname', module_name)
+        product_context = raw_fullname.split(' - ')[0].strip() if ' - ' in raw_fullname else raw_fullname
+        # Allow caller to override the auto-detected product context
+        if request.product_override and request.product_override.strip():
+            product_context = request.product_override.strip()
+        logger.info(f"[Job {job_id}] Product context: {product_context}")
+
         # ─── Extract Claims ───────────────────────────────────────────────
         logger.info(f"[Job {job_id}] Extracting claims for: {module_name}")
 
-        # Walk the full JSON tree to extract all text, regardless of nesting depth
-        def _extract_text(obj: Any, depth: int = 0) -> List[str]:
-            if depth > 10:
-                return []
-            if isinstance(obj, str) and len(obj.strip()) > 15:
-                return [obj.strip()]
-            if isinstance(obj, dict):
-                return [t for v in obj.values() for t in _extract_text(v, depth + 1)]
-            if isinstance(obj, list):
-                return [t for item in obj for t in _extract_text(item, depth + 1)]
-            return []
+        def _strip_html(s: str) -> str:
+            return re.sub(r'<[^>]+>', '', s).strip()
 
-        all_text = _extract_text(parsed_data)
-        full_text = '\n'.join(all_text)
-        # Use up to 20000 chars — enough for very large modules
-        content_excerpt = full_text[:20000] if len(full_text) > 0 else clean_content[:20000]
-        logger.info(f"[Job {job_id}] Content text length: {len(content_excerpt)} chars from {len(all_text)} text nodes")
+        def _extract_claims_from_schema(data: dict) -> List[str]:
+            """
+            Schema-aware claim extractor — universal quality filtering, no caps.
 
-        extraction_query = f"""Extract all explicit technical claims, feature capabilities, configurations, version requirements, and procedural statements from the following training content.
+            Universal rules (apply to any module regardless of size):
+              1. Skip section-0 pages  (course intro / navigation menus)
+              2. Skip any item ending with '?'  (discovery / objection questions)
+              3. Minimum 80 chars after HTML strip  (removes short bullets & metadata)
+                 Exception: quiz answers only need 30 chars (they are complete choices)
+              4. Deduplicate by first 120 chars, case-insensitive
+
+            Result scales naturally: small modules → fewer claims,
+            large modules → more claims. No arbitrary caps.
+            """
+            seen: set = set()
+            results: List[str] = []
+
+            def add(raw: str, min_len: int = 80) -> None:
+                clean = _strip_html(raw).strip()
+                if len(clean) < min_len:
+                    return
+                if clean.rstrip().endswith('?'):
+                    return
+                key = clean[:80].lower()
+                if key not in seen:
+                    seen.add(key)
+                    results.append(clean)
+
+            for page in data.get('pages', []):
+                if page.get('section', -1) == 0:   # skip intro/navigation page
+                    continue
+                for block in page.get('content', []):
+                    t = block.get('type', '')
+                    if t == 'paragraph':
+                        add(block.get('text', ''))
+                    elif t == 'list':
+                        for li in block.get('items', []):
+                            if isinstance(li, str):
+                                add(li)
+                    elif t == 'callout':
+                        add(block.get('content', ''))
+                    elif t == 'table':
+                        headers = block.get('headers', [])
+                        for row in block.get('rows', []):
+                            if not isinstance(row, list):
+                                continue
+                            for i, cell in enumerate(row):
+                                if not isinstance(cell, str):
+                                    continue
+                                label = headers[i] if i < len(headers) else ''
+                                claim_text = f"{label}: {cell}" if label else cell
+                                add(claim_text)
+                    elif t == 'card':
+                        add(block.get('content', ''))
+
+            for quiz in data.get('quizzes', []):
+                for q in quiz.get('questions', []):
+                    choices = q.get('choices', [])
+                    idx = q.get('correctanswer', -1)
+                    if 0 <= idx < len(choices):
+                        add(choices[idx], min_len=30)
+
+            return results
+
+        # Try schema-based extraction first
+        claims = _extract_claims_from_schema(parsed_data)
+
+        # Fallback to RAG-based extraction if schema yields nothing
+        # (handles non-standard JSON formats)
+        if len(claims) < 5:
+            logger.info(f"[Job {job_id}] Schema extraction yielded {len(claims)} claims, falling back to RAG extraction")
+            content_excerpt = '\n'.join(
+                v for v in (str(x) for x in parsed_data.values() if isinstance(x, str))
+                if len(v) > 20
+            )[:20000] or clean_content[:20000]
+
+            extraction_query = f"""Extract all explicit technical claims, feature capabilities, configurations, version requirements, and procedural statements from the following training content.
 
 Output ONLY a numbered list of claims, one per line. Be specific and quote exact technical details. Do not add commentary or analysis.
 
 Training Content:
 {content_excerpt}"""
 
-        extraction_result = await _call_rag_api(extraction_query, current_user.email)
-        claims_text = extraction_result['answer']
-
-        claims = [
-            line.strip().lstrip('0123456789.-) ').strip()
-            for line in claims_text.split('\n')
-            if line.strip() and any(c.isalnum() for c in line)
-        ]
-        claims = [c for c in claims if len(c) > 20]
+            extraction_result = await _call_rag_api(extraction_query, current_user.email)
+            claims_text = extraction_result['answer']
+            claims = [
+                line.strip().lstrip('0123456789.-) ').strip()
+                for line in claims_text.split('\n')
+                if line.strip() and any(c.isalnum() for c in line)
+            ]
+            claims = [c for c in claims if len(c) > 60]
+            await asyncio.sleep(1.0)  # clear rate-limit burst window after extraction call
+        else:
+            logger.info(f"[Job {job_id}] Schema extraction found {len(claims)} claims (no RAG call needed)")
 
         _jobs[job_id]["total"] = len(claims)
-        logger.info(f"[Job {job_id}] Extracted {len(claims)} claims")
-
-        # Small delay after extraction to clear rate limit burst window
-        await asyncio.sleep(1.0)
-
-        # ─── Validate ALL Claims (rate-limited concurrency) ───────────────
+        logger.info(f"[Job {job_id}] {len(claims)} claims ready for validation")
         semaphore = asyncio.Semaphore(6)
 
         async def validate_single_claim(claim: str, index: int) -> ValidationFinding:
@@ -413,22 +490,27 @@ Training Content:
                 start_time = time.time()
                 logger.info(f"[Job {job_id}] Validating claim {index + 1}/{len(claims)}: {claim[:60]}...")
 
-                validation_query = f"""Review the following statement against Cisco documentation.
+                validation_query = f"""You are validating training content about {product_context}.
 
-Statement: {claim}
+Statement to validate: {claim}
+
+Instructions:
+- Only use {product_context} documentation to validate this statement.
+- Do NOT reference documentation from other Cisco products (e.g. Catalyst, MDS, Wireless, Cyber Vision, or unrelated platforms) even if retrieved.
+- If you cannot find relevant {product_context} documentation, use VERDICT: NEEDS_REVISION.
 
 Begin your response with exactly one of these verdict labels on the first line:
 VERDICT: ACCURATE
 VERDICT: INACCURATE
 VERDICT: NEEDS_REVISION
 
-Use ACCURATE if the statement is correct and complete.
-Use INACCURATE if the statement contains factual errors or contradicts Cisco documentation.
+Use ACCURATE if the statement is correct and complete per {product_context} documentation.
+Use INACCURATE if the statement contains factual errors or contradicts {product_context} documentation.
 Use NEEDS_REVISION if the statement is partially correct but missing important caveats, version constraints, or prerequisites.
 
-Then on the next lines, explain your reasoning and provide the correct Cisco documentation details."""
+Then explain your reasoning with specific details from {product_context} documentation."""
 
-                rag_result = await _call_rag_api(validation_query, current_user.email)
+                rag_result = await _call_rag_api(validation_query, current_user.email, product_filter=product_context)
 
                 elapsed = time.time() - start_time
                 logger.info(f"[Job {job_id}] Claim {index + 1} done in {elapsed:.1f}s")
@@ -442,16 +524,29 @@ Then on the next lines, explain your reasoning and provide the correct Cisco doc
                 else:
                     answer = rag_result['answer']
                     is_unknown = rag_result['is_unknown']
-                    # Strip the VERDICT line from the displayed answer so the report reads cleanly
-                    answer_lines = answer.strip().split('\n')
-                    if answer_lines and answer_lines[0].upper().startswith('VERDICT:'):
-                        cisco_answer = '\n'.join(answer_lines[1:]).strip()
-                    else:
-                        cisco_answer = answer
 
-                    if is_unknown or not answer.strip():
+                    # Detect Cisco system error responses served as HTTP 200
+                    # (e.g. "Apologies for the inconvenience...temporary technical issue")
+                    _CISCO_ERROR_PHRASES = [
+                        "apologies for the inconvenience",
+                        "temporary technical issue",
+                        "try again shortly",
+                        "system is currently experiencing",
+                    ]
+                    if any(p in answer.lower() for p in _CISCO_ERROR_PHRASES):
+                        status = "unverified"
+                        cisco_answer = "[API temporarily unavailable — could not be verified. Please re-run.]"
+                    elif is_unknown or not answer.strip():
                         status = "needs_revision"
+                        cisco_answer = answer
                     else:
+                        # Strip the VERDICT line from the displayed answer
+                        answer_lines = answer.strip().split('\n')
+                        if answer_lines and answer_lines[0].upper().startswith('VERDICT:'):
+                            cisco_answer = '\n'.join(answer_lines[1:]).strip()
+                        else:
+                            cisco_answer = answer
+
                         # Parse the explicit verdict from the first line
                         first_line = answer.strip().split('\n')[0].upper()
                         if 'VERDICT: INACCURATE' in first_line or 'INACCURATE' in first_line:
@@ -463,7 +558,6 @@ Then on the next lines, explain your reasoning and provide the correct Cisco doc
                         else:
                             # Fallback: scan for explicit negative phrases only
                             answer_lower = answer.lower()
-                            # Only flag as inaccurate if it very explicitly says so
                             if any(phrase in answer_lower for phrase in [
                                 "this statement is inaccurate",
                                 "this claim is inaccurate",
@@ -502,8 +596,9 @@ Then on the next lines, explain your reasoning and provide the correct Cisco doc
         validation_elapsed = time.time() - validation_start
         logger.info(f"[Job {job_id}] All {len(findings)} claims validated in {validation_elapsed:.1f}s")
 
-        validated_count = sum(1 for f in findings if f.status == "validated")
-        flagged_count = sum(1 for f in findings if f.status != "validated")
+        validated_count  = sum(1 for f in findings if f.status == "validated")
+        flagged_count   = sum(1 for f in findings if f.status in ("needs_revision", "inaccurate"))
+        unverified_count = sum(1 for f in findings if f.status == "unverified")
 
         # ─── Build 7-Section QC Report ────────────────────────────────────
         report_sections = []
@@ -518,7 +613,7 @@ Then on the next lines, explain your reasoning and provide the correct Cisco doc
         report_sections.append(
             f"## 📋 Content Summary\n\n"
             f"This module contains **{len(claims)} technical claims** covering features, configurations, and operational procedures. "
-            f"**{validated_count} claims** were validated against Cisco documentation, while **{flagged_count} claims** require revision or lack authoritative sources.\n"
+            f"**{validated_count}** confirmed accurate · **{flagged_count}** flagged for revision · **{unverified_count}** could not be verified (API unavailable).\n"
         )
 
         validation_results = ["## 🔎 Validation Results\n"]
@@ -527,6 +622,8 @@ Then on the next lines, explain your reasoning and provide the correct Cisco doc
                 icon, label = "✅", "Accurate"
             elif finding.status == "inaccurate":
                 icon, label = "❌", "Inaccurate"
+            elif finding.status == "unverified":
+                icon, label = "🔄", "Could Not Verify"
             else:
                 icon, label = "⚠️", "Needs Revision"
 
@@ -541,13 +638,10 @@ Then on the next lines, explain your reasoning and provide the correct Cisco doc
         edits = ["## ✏️ Suggested Edits\n"]
         has_edits = False
         for idx, finding in enumerate(findings, 1):
-            if finding.status != "validated":
+            if finding.status not in ("validated", "unverified"):
                 has_edits = True
                 edits.append(f"\n**Claim {idx}:** \"{finding.claim[:100]}{'...' if len(finding.claim) > 100 else ''}\"\n")
-                if finding.cisco_answer and finding.cisco_answer.startswith('['):
-                    edits.append(f"**Issue:** {finding.cisco_answer}\n")
-                    edits.append("**Recommendation:** Unable to validate due to API error. Please retry or verify manually.\n")
-                elif finding.status == "needs_revision":
+                if finding.status == "needs_revision":
                     edits.append("**Issue:** Cisco documentation does not clearly confirm this claim.\n")
                     edits.append(f"**Cisco Documentation Says:** {finding.cisco_answer[:400]}{'...' if len(finding.cisco_answer or '') > 400 else ''}\n")
                     edits.append("**Recommendation:** Revise to align with authoritative Cisco documentation, or remove if unsupported.\n")
@@ -568,8 +662,11 @@ Then on the next lines, explain your reasoning and provide the correct Cisco doc
         report_sections.append('\n'.join(gaps))
 
         audience = ["## 👥 Audience Fit Assessment\n"]
+        reviewable = len(findings) - unverified_count
         audience.append(f"\nThis training content is {'highly appropriate' if validated_count > flagged_count else 'partially suitable'} for Cisco Systems Engineers. ")
-        audience.append(f"With **{validated_count} validated claims** out of **{len(findings)} reviewed**, the technical accuracy is {'strong' if validated_count > flagged_count else 'moderate'}. ")
+        audience.append(f"Of **{reviewable} verifiable claims**, **{validated_count}** are confirmed accurate and **{flagged_count}** need revision. ")
+        if unverified_count > 0:
+            audience.append(f"**{unverified_count} claim(s)** could not be verified due to a temporary API outage — re-run to complete the review. ")
         if flagged_count > 0:
             audience.append(f"\n\n**Recommendation:** Address the **{flagged_count} flagged items** before deployment to ensure field-ready accuracy.\n")
         else:

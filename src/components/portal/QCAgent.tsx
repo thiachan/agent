@@ -28,7 +28,7 @@ interface QCResult {
 
 interface ValidationFinding {
   claim: string
-  status: 'validated' | 'needs_revision' | 'inaccurate'
+  status: 'validated' | 'needs_revision' | 'inaccurate' | 'unverified'
   exact_quote?: string
   cisco_answer?: string
   sources: any[]
@@ -58,10 +58,11 @@ const SOURCE_LABELS: Record<SourceFilter, string> = {
 // ─── PDF Export ─────────────────────────────────────────────────────────────
 
 function exportToPDF(result: ContentValidationResult) {
-  const inaccurate = result.validation_findings.filter(f => f.status === 'inaccurate').length
+  const inaccurate   = result.validation_findings.filter(f => f.status === 'inaccurate').length
   const needsRevision = result.validation_findings.filter(f => f.status === 'needs_revision').length
-  const validated = result.validation_findings.filter(f => f.status === 'validated').length
-  const total = result.extracted_claims.length
+  const unverified   = result.validation_findings.filter(f => f.status === 'unverified').length
+  const validated    = result.validation_findings.filter(f => f.status === 'validated').length
+  const total        = result.extracted_claims.length
 
   const reportHtml = result.qc_report
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -69,6 +70,7 @@ function exportToPDF(result: ContentValidationResult) {
     .replace(/^### ✅ (.*?)$/gm, '<h3 class="accurate">✅ $1</h3>')
     .replace(/^### ⚠️ (.*?)$/gm, '<h3 class="revision">⚠️ $1</h3>')
     .replace(/^### ❌ (.*?)$/gm, '<h3 class="inaccurate">❌ $1</h3>')
+    .replace(/^### 🔄 (.*?)$/gm, '<h3 class="unverified">🔄 $1</h3>')
     .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/^- (.*?)$/gm, '<li>$1</li>')
@@ -101,6 +103,7 @@ function exportToPDF(result: ContentValidationResult) {
   h3.accurate { color: #155724; }
   h3.revision { color: #856404; }
   h3.inaccurate { color: #721c24; }
+  h3.unverified { color: #555; }
   p, li { font-size: 8.5pt; color: #333; line-height: 1.5; }
   li { margin-left: 16px; }
   strong { color: #111; }
@@ -118,6 +121,7 @@ function exportToPDF(result: ContentValidationResult) {
   <span class="stat ok">✓ ${validated} Accurate</span>
   <span class="stat warn">△ ${needsRevision} Needs Revision</span>
   ${inaccurate > 0 ? `<span class="stat bad">✗ ${inaccurate} Inaccurate</span>` : ''}
+  ${unverified > 0 ? `<span class="stat total">🔄 ${unverified} Unverified</span>` : ''}
 </div>
 <div class="bar">
   <div class="bar-ok" style="width:${total ? Math.round(validated/total*100) : 0}%"></div>
@@ -143,10 +147,11 @@ ${reportHtml}
 // ─── Validation Report Display ───────────────────────────────────────────────
 
 function ValidationReportCard({ result }: { result: ContentValidationResult }) {
-  const inaccurateCount = result.validation_findings.filter(f => f.status === 'inaccurate').length
+  const inaccurateCount    = result.validation_findings.filter(f => f.status === 'inaccurate').length
   const needsRevisionCount = result.validation_findings.filter(f => f.status === 'needs_revision').length
-  const validatedCount = result.validation_findings.filter(f => f.status === 'validated').length
-  const totalClaims = result.extracted_claims.length
+  const unverifiedCount    = result.validation_findings.filter(f => f.status === 'unverified').length
+  const validatedCount     = result.validation_findings.filter(f => f.status === 'validated').length
+  const totalClaims        = result.extracted_claims.length
 
   const renderedReport = result.qc_report
     // Strip duplicate title section (shown in header already)
@@ -206,6 +211,11 @@ function ValidationReportCard({ result }: { result: ContentValidationResult }) {
           {inaccurateCount > 0 && (
             <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/15" style={{ fontSize: '9px', color: '#f87171', fontWeight: 600 }}>
               ✗ {inaccurateCount} inaccurate
+            </span>
+          )}
+          {unverifiedCount > 0 && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-500/20" style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>
+              🔄 {unverifiedCount} unverified
             </span>
           )}
         </div>
@@ -386,6 +396,7 @@ export function QCAgent() {
   const [query, setQuery] = useState('')
   const [jsonContent, setJsonContent] = useState('')
   const [moduleName, setModuleName] = useState('')
+  const [productOverride, setProductOverride] = useState('')
   const [selectedSource, setSelectedSource] = useState<SourceFilter>('CDC')
   const [results, setResults] = useState<QCResult[]>([])
   const [validationResults, setValidationResults] = useState<ContentValidationResult[]>([])
@@ -498,6 +509,7 @@ export function QCAgent() {
         json_content: trimmed,
         module_name: moduleName || undefined,
         selected_sources: selectedSource,
+        product_override: productOverride.trim() || undefined,
       })
 
       setActiveJobId(data.job_id)
@@ -505,6 +517,7 @@ export function QCAgent() {
       // Clear inputs now that job is queued
       setJsonContent('')
       setModuleName('')
+      setProductOverride('')
     } catch (err: any) {
       const msg =
         err.response?.data?.detail ||
@@ -755,13 +768,22 @@ export function QCAgent() {
               </div>
             )}
             <div className="space-y-3">
-              <input
-                type="text"
-                value={moduleName}
-                onChange={(e) => setModuleName(e.target.value)}
-                placeholder="Module Name (optional)"
-                className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition-all"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={moduleName}
+                  onChange={(e) => setModuleName(e.target.value)}
+                  placeholder="Module Name (optional — auto-detected from JSON)"
+                  className="flex-1 bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition-all"
+                />
+                <input
+                  type="text"
+                  value={productOverride}
+                  onChange={(e) => setProductOverride(e.target.value)}
+                  placeholder="Product / Solution filter (e.g. Cisco ISE)"
+                  className="flex-1 bg-slate-800/60 border border-emerald-600/40 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition-all"
+                />
+              </div>
               <div className="flex gap-3">
                 <textarea
                   ref={jsonRef}
