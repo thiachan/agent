@@ -691,7 +691,8 @@ IMPORTANT: Before answering, check if the question contains pronouns or referenc
                                 azure_deployment=deployment_name,
                                 openai_api_key=token,
                                 openai_api_version="2024-08-01-preview",
-                                temperature=0
+                                temperature=0,
+                                max_tokens=settings.CISCO_MAX_TOKENS,
                             )
                             # Retry the request
                             try:

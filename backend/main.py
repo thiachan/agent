@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, documents, chat, agents, upload, generate, models, knowledge_bases, onboarding, bookmarks, incubation
+from app.api import auth, documents, chat, agents, upload, generate, models, knowledge_bases, onboarding, bookmarks, incubation, qc_agent
 from app.models import onboarding as onboarding_model  # ensure table is registered
 from app.core.config import settings
 from app.core.migrate import run_migrations
@@ -100,6 +100,7 @@ app.include_router(knowledge_bases.router, prefix="/api/knowledge-bases", tags=[
 app.include_router(onboarding.router, prefix="/api/onboarding", tags=["Onboarding"])
 app.include_router(bookmarks.router, prefix="/api/bookmarks", tags=["Bookmarks"])
 app.include_router(incubation.router, prefix="/api/incubation", tags=["Incubation"])
+app.include_router(qc_agent.router, prefix="/api/qc-agent", tags=["QC Agent"])
 
 @app.get("/")
 async def root():

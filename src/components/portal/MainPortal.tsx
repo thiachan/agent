@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
-import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star, Users, BookOpen, PlayCircle, Sun, Moon, Bookmark, FlaskConical, Waves } from 'lucide-react'
+import { MessageSquare, Plus, LogOut, ChevronLeft, ChevronRight, Bot, FileText, Trash2, Star, Users, BookOpen, PlayCircle, Sun, Moon, Bookmark, FlaskConical, Waves, ShieldCheck } from 'lucide-react'
 import { ChatWithGeneration } from './ChatWithGeneration'
 import { DocumentUpload } from './DocumentUpload'
 import { UserManagement } from './UserManagement'
 import { Onboarding } from './Onboarding'
 import { BookmarkPage } from './BookmarkPage'
 import { Incubation } from './Incubation'
+import { QCAgent } from './QCAgent'
 import SeagentPage from '@/app/SEAGENT/page'
 import api from '@/lib/api'
 
@@ -24,7 +25,7 @@ interface ChatSession {
 }
 
 export function MainPortal() {
-  const [activeView, setActiveView] = useState<'chat' | 'upload' | 'users' | 'onboarding' | 'onboarding-sim' | 'bookmarks' | 'incubation' | 'seagent'>('chat')
+  const [activeView, setActiveView] = useState<'chat' | 'upload' | 'users' | 'onboarding' | 'onboarding-sim' | 'bookmarks' | 'incubation' | 'seagent' | 'qcagent'>('chat')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [recentChats, setRecentChats] = useState<ChatSession[]>([])
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
@@ -197,6 +198,17 @@ export function MainPortal() {
             >
               <FlaskConical className="w-5 h-5" />
               <span>Incubation</span>
+            </button>
+            <button
+              onClick={() => setActiveView('qcagent')}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-sm ${
+                activeView === 'qcagent'
+                  ? 'bg-gradient-to-r from-emerald-500/20 to-cyan-600/20 text-white border border-emerald-400/30'
+                  : 'text-gray-400 hover:bg-slate-700/50 hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-5 h-5" />
+              <span>QC Agent</span>
             </button>
             <button
               onClick={() => setActiveView('seagent')}
@@ -393,6 +405,7 @@ export function MainPortal() {
         )}
         {activeView === 'bookmarks' && <BookmarkPage />}
         {activeView === 'incubation' && <Incubation />}
+        {activeView === 'qcagent' && <QCAgent />}
         {activeView === 'seagent' && <SeagentPage />}
       </div>
     </div>

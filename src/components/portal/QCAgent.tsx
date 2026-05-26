@@ -1,0 +1,795 @@
+'use client'
+
+import { useState, useRef, useEffect } from 'react'
+import { Send, Loader2, ShieldCheck, AlertTriangle, RefreshCw, BookOpen, ChevronDown, ChevronUp, FileJson, MessageSquare, Check, X, Download } from 'lucide-react'
+import api from '@/lib/api'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Mode = 'query' | 'validate'
+
+interface SourceMeta {
+  doc_meta_info?: Record<string, unknown>
+  is_answer_unknown?: boolean
+  [key: string]: unknown
+}
+
+interface QCResult {
+  id: number
+  query: string
+  answer: string
+  sources: SourceMeta[]
+  is_answer_unknown: boolean
+  return_code: number
+  return_message: string
+  conversation_title?: string
+  timestamp: Date
+}
+
+interface ValidationFinding {
+  claim: string
+  status: 'validated' | 'needs_revision' | 'inaccurate'
+  exact_quote?: string
+  cisco_answer?: string
+  sources: any[]
+}
+
+interface ContentValidationResult {
+  id: number
+  module_name: string
+  is_truncated: boolean
+  extracted_claims: string[]
+  validation_findings: ValidationFinding[]
+  qc_report: string
+  validated_count: number
+  flagged_count: number
+  timestamp: Date
+}
+
+type SourceFilter = 'CDC' | 'SC' | 'HZ' | 'ALL'
+
+const SOURCE_LABELS: Record<SourceFilter, string> = {
+  CDC: 'Cisco Docs (CDC)',
+  SC: 'Sales Connect (SC)',
+  HZ: 'Help Zone (HZ)',
+  ALL: 'All Sources',
+}
+
+// ─── PDF Export ─────────────────────────────────────────────────────────────
+
+function exportToPDF(result: ContentValidationResult) {
+  const inaccurate = result.validation_findings.filter(f => f.status === 'inaccurate').length
+  const needsRevision = result.validation_findings.filter(f => f.status === 'needs_revision').length
+  const validated = result.validation_findings.filter(f => f.status === 'validated').length
+  const total = result.extracted_claims.length
+
+  const reportHtml = result.qc_report
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
+    .replace(/^### ✅ (.*?)$/gm, '<h3 class="accurate">✅ $1</h3>')
+    .replace(/^### ⚠️ (.*?)$/gm, '<h3 class="revision">⚠️ $1</h3>')
+    .replace(/^### ❌ (.*?)$/gm, '<h3 class="inaccurate">❌ $1</h3>')
+    .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^- (.*?)$/gm, '<li>$1</li>')
+    .replace(/\n/g, '<br/>')
+    .replace(/(&lt;h[23]&gt;)/g, '')
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>QC Report – ${result.module_name}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 9pt; color: #1a1a2e; padding: 20px 28px; }
+  .header { border-bottom: 2px solid #0066cc; padding-bottom: 10px; margin-bottom: 14px; }
+  .header h1 { font-size: 13pt; color: #003366; }
+  .header p { font-size: 8pt; color: #555; margin-top: 2px; }
+  .stats { display: flex; gap: 10px; margin: 10px 0 14px; }
+  .stat { padding: 5px 10px; border-radius: 4px; font-size: 8pt; font-weight: bold; }
+  .stat.total { background: #f0f0f0; color: #333; }
+  .stat.ok { background: #d4edda; color: #155724; }
+  .stat.warn { background: #fff3cd; color: #856404; }
+  .stat.bad { background: #f8d7da; color: #721c24; }
+  .bar { height: 6px; border-radius: 3px; display: flex; margin-bottom: 14px; overflow: hidden; }
+  .bar-ok { background: #28a745; }
+  .bar-warn { background: #ffc107; }
+  .bar-bad { background: #dc3545; }
+  h2 { font-size: 10pt; color: #003366; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  h3 { font-size: 9pt; margin: 8px 0 3px; }
+  h3.accurate { color: #155724; }
+  h3.revision { color: #856404; }
+  h3.inaccurate { color: #721c24; }
+  p, li { font-size: 8.5pt; color: #333; line-height: 1.5; }
+  li { margin-left: 16px; }
+  strong { color: #111; }
+  .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 7.5pt; color: #888; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🛡️ Cisco Content QC Report</h1>
+  <p><strong>Module:</strong> ${result.module_name} &nbsp;|&nbsp; <strong>Date:</strong> ${result.timestamp.toLocaleString()}</p>
+</div>
+<div class="stats">
+  <span class="stat total"># ${total} Claims</span>
+  <span class="stat ok">✓ ${validated} Accurate</span>
+  <span class="stat warn">△ ${needsRevision} Needs Revision</span>
+  ${inaccurate > 0 ? `<span class="stat bad">✗ ${inaccurate} Inaccurate</span>` : ''}
+</div>
+<div class="bar">
+  <div class="bar-ok" style="width:${total ? Math.round(validated/total*100) : 0}%"></div>
+  <div class="bar-warn" style="width:${total ? Math.round(needsRevision/total*100) : 0}%"></div>
+  <div class="bar-bad" style="width:${total ? Math.round(inaccurate/total*100) : 0}%"></div>
+</div>
+${reportHtml}
+<div class="footer">Generated by Cisco QC Agent · Powered by Cisco Data RAG API · ${result.extracted_claims.length} claims validated</div>
+</body>
+</html>`
+
+  const blob = new Blob([html], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank')
+  if (win) {
+    win.onload = () => {
+      win.print()
+      URL.revokeObjectURL(url)
+    }
+  }
+}
+
+// ─── Validation Report Display ───────────────────────────────────────────────
+
+function ValidationReportCard({ result }: { result: ContentValidationResult }) {
+  const inaccurateCount = result.validation_findings.filter(f => f.status === 'inaccurate').length
+  const needsRevisionCount = result.validation_findings.filter(f => f.status === 'needs_revision').length
+  const validatedCount = result.validation_findings.filter(f => f.status === 'validated').length
+  const totalClaims = result.extracted_claims.length
+
+  const renderedReport = result.qc_report
+    // Strip duplicate title section (shown in header already)
+    .replace(/^## 🛡️.*$/gm, '')
+    .replace(/^Greetings.*$/gm, '')
+    // Section headings → inline-styled h2
+    .replace(/^## (.*?)$/gm,
+      '<h2 style="font-size:9px;font-weight:700;color:#67e8f9;text-transform:uppercase;letter-spacing:0.06em;margin:14px 0 5px;padding-bottom:3px;border-bottom:1px solid rgba(71,85,105,0.5);">$1</h2>')
+    // Claim headings by verdict
+    .replace(/^### ✅ (.*?)$/gm,
+      '<h3 style="font-size:9px;font-weight:600;color:#34d399;margin:8px 0 2px;">✅ $1</h3>')
+    .replace(/^### ⚠️ (.*?)$/gm,
+      '<h3 style="font-size:9px;font-weight:600;color:#fbbf24;margin:8px 0 2px;">⚠️ $1</h3>')
+    .replace(/^### ❌ (.*?)$/gm,
+      '<h3 style="font-size:9px;font-weight:600;color:#f87171;margin:8px 0 2px;">❌ $1</h3>')
+    .replace(/^### (.*?)$/gm,
+      '<h3 style="font-size:9px;font-weight:600;color:#cbd5e1;margin:8px 0 2px;">$1</h3>')
+    // Bold
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#f1f5f9;font-weight:600;">$1</strong>')
+    // Bullets
+    .replace(/^- (.*?)$/gm, '<li style="font-size:9px;color:#94a3b8;margin-left:12px;list-style:disc;">$1</li>')
+    // Newlines → breaks, then clean up extra breaks after headings
+    .replace(/\n/g, '<br/>')
+    .replace(/(<\/h[23]>)<br\/>/g, '$1')
+    .replace(/<br\/><br\/>/g, '<br/>')
+
+  return (
+    <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-slate-700/40 bg-slate-700/20">
+        {/* Row 1: Title + PDF button */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p style={{ fontSize: '9px' }} className="text-slate-400 uppercase tracking-wider font-semibold">QC Report</p>
+            <p className="text-xs text-white font-semibold mt-0.5 truncate">{result.module_name}</p>
+            <p style={{ fontSize: '9px' }} className="text-slate-500 mt-0.5">{result.timestamp.toLocaleString()}</p>
+          </div>
+          <button
+            onClick={() => exportToPDF(result)}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-600/50 hover:bg-cyan-500/20 border border-slate-500/40 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-300 transition-colors"
+            style={{ fontSize: '10px', fontWeight: 600 }}
+          >
+            <Download className="w-3 h-3" /> Export PDF
+          </button>
+        </div>
+        {/* Row 2: Stats pills */}
+        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-700/60" style={{ fontSize: '9px', color: '#94a3b8' }}>
+            # {totalClaims} total
+          </span>
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15" style={{ fontSize: '9px', color: '#34d399', fontWeight: 600 }}>
+            ✓ {validatedCount} accurate
+          </span>
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15" style={{ fontSize: '9px', color: '#fbbf24', fontWeight: 600 }}>
+            △ {needsRevisionCount} revision
+          </span>
+          {inaccurateCount > 0 && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/15" style={{ fontSize: '9px', color: '#f87171', fontWeight: 600 }}>
+              ✗ {inaccurateCount} inaccurate
+            </span>
+          )}
+        </div>
+        {/* Accuracy bar */}
+        {totalClaims > 0 && (
+          <div className="mt-2 flex gap-px h-1 rounded-full overflow-hidden">
+            <div className="bg-emerald-500 rounded-l-full" style={{ width: `${(validatedCount / totalClaims) * 100}%` }} />
+            <div className="bg-amber-500" style={{ width: `${(needsRevisionCount / totalClaims) * 100}%` }} />
+            <div className="bg-red-500 rounded-r-full" style={{ width: `${(inaccurateCount / totalClaims) * 100}%` }} />
+          </div>
+        )}
+      </div>
+
+      {/* Report Body */}
+      <div className="px-4 py-3 max-h-[650px] overflow-y-auto">
+        <div
+          style={{ fontSize: '9px', lineHeight: '1.6', color: '#cbd5e1' }}
+          dangerouslySetInnerHTML={{ __html: renderedReport }}
+        />
+        {result.is_truncated && (
+          <div className="mt-3 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <p className="text-amber-300 flex items-center gap-1.5" style={{ fontSize: '9px' }}>
+              <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+              JSON appeared truncated — report reflects only successfully parsed data.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-1.5 border-t border-slate-700/30 bg-slate-700/10 flex items-center gap-3">
+        <span style={{ fontSize: '9px' }} className="text-emerald-400">✓ Accurate</span>
+        <span style={{ fontSize: '9px' }} className="text-amber-400">△ Needs Revision</span>
+        <span style={{ fontSize: '9px' }} className="text-red-400">✗ Inaccurate</span>
+        <span style={{ fontSize: '9px' }} className="ml-auto text-slate-500">{totalClaims} claims validated</span>
+      </div>
+    </div>
+  )
+}
+
+// ─── Source Metadata Card ─────────────────────────────────────────────────────
+
+function SourceCard({ meta, index }: { meta: SourceMeta; index: number }) {
+  const [open, setOpen] = useState(false)
+  const docMeta = meta.doc_meta_info
+
+  const title =
+    (docMeta as any)?.title ||
+    (docMeta as any)?.doc_title ||
+    (docMeta as any)?.name ||
+    `Reference ${index + 1}`
+
+  const url =
+    (docMeta as any)?.url ||
+    (docMeta as any)?.link ||
+    (docMeta as any)?.source_url ||
+    null
+
+  return (
+    <div className="border border-slate-600/40 rounded-lg overflow-hidden text-xs">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-slate-700/40 hover:bg-slate-700/60 transition-colors text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <BookOpen className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+          <span className="text-slate-200 truncate font-medium">{title}</span>
+        </div>
+        {open ? (
+          <ChevronUp className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 ml-2" />
+        ) : (
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 ml-2" />
+        )}
+      </button>
+      {open && (
+        <div className="px-3 py-2 bg-slate-800/40 space-y-1.5">
+          {url ? (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-400 hover:underline break-all"
+            >
+              {url}
+            </a>
+          ) : null}
+          {docMeta && Object.keys(docMeta).length > 0 ? (
+            <pre className="text-slate-400 text-[10px] overflow-auto max-h-32 whitespace-pre-wrap">
+              {JSON.stringify(docMeta, null, 2)}
+            </pre>
+          ) : (
+            <span className="text-slate-500">No additional metadata</span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Result Card ──────────────────────────────────────────────────────────────
+
+function ResultCard({ result }: { result: QCResult }) {
+  const [sourcesOpen, setSourcesOpen] = useState(false)
+
+  return (
+    <div className="rounded-xl border border-slate-700/50 bg-slate-800/40 overflow-hidden">
+      {/* Query */}
+      <div className="px-4 py-3 border-b border-slate-700/40 bg-slate-700/20">
+        <p className="text-xs text-slate-400 uppercase tracking-wider mb-1 font-semibold">Query</p>
+        <p className="text-sm text-white">{result.query}</p>
+      </div>
+
+      {/* Answer */}
+      <div className="px-4 py-4">
+        {result.is_answer_unknown ? (
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-amber-300 text-sm font-medium">No grounded answer found</p>
+              <p className="text-amber-400/70 text-xs mt-1">
+                Try rephrasing your query or selecting broader sources.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-1" />
+            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{result.answer}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Sources toggle */}
+      {result.sources.length > 0 && (
+        <div className="px-4 pb-4">
+          <button
+            onClick={() => setSourcesOpen((o) => !o)}
+            className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+          >
+            {sourcesOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            {sourcesOpen ? 'Hide' : 'Show'} {result.sources.length} source
+            {result.sources.length !== 1 ? 's' : ''}
+          </button>
+          {sourcesOpen && (
+            <div className="mt-2 space-y-1.5">
+              {result.sources.map((src, i) => (
+                <SourceCard key={i} meta={src} index={i} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="px-4 py-2 border-t border-slate-700/30 bg-slate-700/10 flex items-center justify-between">
+        <span
+          className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+            result.return_code === 0
+              ? 'bg-emerald-500/15 text-emerald-400'
+              : 'bg-red-500/15 text-red-400'
+          }`}
+        >
+          {result.return_message}
+        </span>
+        <span className="text-[10px] text-slate-500">
+          {result.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {result.conversation_title ? ` · ${result.conversation_title}` : ''}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export function QCAgent() {
+  const [mode, setMode] = useState<Mode>('query')
+  const [query, setQuery] = useState('')
+  const [jsonContent, setJsonContent] = useState('')
+  const [moduleName, setModuleName] = useState('')
+  const [selectedSource, setSelectedSource] = useState<SourceFilter>('CDC')
+  const [results, setResults] = useState<QCResult[]>([])
+  const [validationResults, setValidationResults] = useState<ContentValidationResult[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [activeJobId, setActiveJobId] = useState<string | null>(null)
+  const [jobProgress, setJobProgress] = useState<{ progress: number; total: number; module_name: string } | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const jsonRef = useRef<HTMLTextAreaElement>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const nextId = useRef(1)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [results, validationResults])
+
+  // Poll for validation job progress
+  useEffect(() => {
+    if (!activeJobId) return
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/api/qc-agent/validate-content/status/${activeJobId}`)
+        setJobProgress({ progress: data.progress, total: data.total, module_name: data.module_name })
+        if (data.status === 'complete' && data.result) {
+          clearInterval(interval)
+          setActiveJobId(null)
+          setJobProgress(null)
+          setLoading(false)
+          setValidationResults((prev) => [
+            ...prev,
+            {
+              id: nextId.current++,
+              module_name: data.result.module_name,
+              is_truncated: data.result.is_truncated,
+              extracted_claims: data.result.extracted_claims,
+              validation_findings: data.result.validation_findings,
+              qc_report: data.result.qc_report,
+              validated_count: data.result.validated_count,
+              flagged_count: data.result.flagged_count,
+              timestamp: new Date(),
+            },
+          ])
+        } else if (data.status === 'error') {
+          clearInterval(interval)
+          setActiveJobId(null)
+          setJobProgress(null)
+          setLoading(false)
+          setError(data.error || 'Validation failed. Please try again.')
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [activeJobId])
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    const trimmed = query.trim()
+    if (!trimmed || loading) return
+
+    setLoading(true)
+    setError(null)
+    const submittedQuery = trimmed
+    setQuery('')
+
+    try {
+      const { data } = await api.post('/api/qc-agent/query', {
+        query: submittedQuery,
+        selected_sources: selectedSource,
+      })
+
+      setResults((prev) => [
+        ...prev,
+        {
+          id: nextId.current++,
+          query: submittedQuery,
+          answer: data.answer,
+          sources: data.sources ?? [],
+          is_answer_unknown: data.is_answer_unknown ?? false,
+          return_code: data.return_code ?? 0,
+          return_message: data.return_message ?? 'Success',
+          conversation_title: data.conversation_title,
+          timestamp: new Date(),
+        },
+      ])
+    } catch (err: any) {
+      const msg =
+        err.response?.data?.detail ||
+        err.message ||
+        'Request failed. Please try again.'
+      setError(msg)
+    } finally {
+      setLoading(false)
+      setTimeout(() => inputRef.current?.focus(), 50)
+    }
+  }
+
+  const handleValidateContent = async () => {
+    const trimmed = jsonContent.trim()
+    if (!trimmed || loading) return
+
+    setLoading(true)
+    setError(null)
+    setJobProgress(null)
+
+    try {
+      // Submit job — returns immediately with job_id
+      const { data } = await api.post('/api/qc-agent/validate-content', {
+        json_content: trimmed,
+        module_name: moduleName || undefined,
+        selected_sources: selectedSource,
+      })
+
+      setActiveJobId(data.job_id)
+      setJobProgress({ progress: 0, total: 0, module_name: data.module_name })
+      // Clear inputs now that job is queued
+      setJsonContent('')
+      setModuleName('')
+    } catch (err: any) {
+      const msg =
+        err.response?.data?.detail ||
+        err.message ||
+        'Validation failed. Please check your JSON and try again.'
+      setError(msg)
+      setLoading(false)
+      setTimeout(() => jsonRef.current?.focus(), 50)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && mode === 'query') {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-[#07182D]">
+      {/* Header */}
+      <div className="flex-shrink-0 px-6 py-4 border-b border-slate-700/50 bg-slate-900/40">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h1 className="text-lg font-bold text-white flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-cyan-400" />
+              QC Agent
+            </h1>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Cisco-data-grounded content validation · Powered by Cisco Data RAG API
+            </p>
+          </div>
+
+          {/* Source selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">Source:</span>
+            <div className="flex rounded-lg overflow-hidden border border-slate-600/50">
+              {(Object.keys(SOURCE_LABELS) as SourceFilter[]).map((src) => (
+                <button
+                  key={src}
+                  onClick={() => setSelectedSource(src)}
+                  className={`px-2.5 py-1.5 text-xs transition-colors ${
+                    selectedSource === src
+                      ? 'bg-cyan-500/30 text-cyan-300 border-r border-slate-600/50 last:border-r-0'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/40 border-r border-slate-600/50 last:border-r-0'
+                  }`}
+                >
+                  {src}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Mode Switcher */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setMode('query')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
+              mode === 'query'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/40 border border-transparent'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            Quick Query
+          </button>
+          <button
+            onClick={() => setMode('validate')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
+              mode === 'validate'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/40 border border-transparent'
+            }`}
+          >
+            <FileJson className="w-3.5 h-3.5" />
+            Content Validation
+          </button>
+        </div>
+      </div>
+
+      {/* Results area */}
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        {mode === 'query' && results.length === 0 && validationResults.length === 0 && !loading && (
+          <div className="flex flex-col items-center justify-center h-full text-center py-16">
+            <ShieldCheck className="w-12 h-12 text-cyan-500/40 mb-4" />
+            <h2 className="text-slate-300 font-medium text-lg mb-2">Validate content against Cisco data</h2>
+            <p className="text-slate-500 text-sm max-w-sm">
+              Ask any question. Answers are grounded in Cisco-approved documentation and sales content.
+            </p>
+            <div className="mt-6 grid grid-cols-1 gap-2 w-full max-w-sm">
+              {[
+                'How does Cisco AI Access work?',
+                'What is the licensing model for Cisco AI Defense?',
+                'Explain Cisco Smart Licensing on IOS XE.',
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => {
+                    setQuery(suggestion)
+                    inputRef.current?.focus()
+                  }}
+                  className="text-left px-3 py-2.5 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:bg-slate-700/40 text-slate-300 hover:text-white text-xs transition-colors"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mode === 'validate' && validationResults.length === 0 && results.length === 0 && !loading && (
+          <div className="flex flex-col items-center justify-center h-full text-center py-16">
+            <FileJson className="w-12 h-12 text-emerald-500/40 mb-4" />
+            <h2 className="text-slate-300 font-medium text-lg mb-2">Validate Training Content</h2>
+            <p className="text-slate-500 text-sm max-w-md">
+              Paste your JSON training content below. The QC Agent will extract technical claims and validate each against Cisco documentation, generating a comprehensive 7-section report.
+            </p>
+          </div>
+        )}
+
+        {mode === 'query' && results.map((result) => (
+          <ResultCard key={result.id} result={result} />
+        ))}
+
+        {mode === 'validate' && validationResults.map((result) => (
+          <ValidationReportCard key={result.id} result={result} />
+        ))}
+
+        {loading && mode === 'query' && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-700/40 bg-slate-800/30 text-sm text-slate-400">
+            <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+            Querying Cisco Data RAG…
+          </div>
+        )}
+
+        {loading && mode === 'validate' && (
+          <div className="rounded-xl border border-emerald-500/20 bg-slate-800/40 p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-400 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm text-white font-medium">
+                  {!jobProgress?.total
+                    ? `Extracting claims from ${jobProgress?.module_name || 'module'}…`
+                    : `Validating ${jobProgress.module_name}…`}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {!jobProgress?.total
+                    ? 'Identifying technical claims via Cisco Data RAG API'
+                    : `${jobProgress.progress} of ${jobProgress.total} claims checked against Cisco documentation`}
+                </p>
+              </div>
+              {jobProgress?.total ? (
+                <span className="ml-auto text-xs font-mono text-emerald-300 flex-shrink-0">
+                  {jobProgress.progress}/{jobProgress.total}
+                </span>
+              ) : null}
+            </div>
+            {jobProgress?.total ? (
+              <div className="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.round((jobProgress.progress / jobProgress.total) * 100)}%` }}
+                />
+              </div>
+            ) : (
+              <div className="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full animate-pulse w-1/3" />
+              </div>
+            )}
+            <p className="text-[10px] text-slate-500">Running in background — you can navigate away and come back</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-red-500/30 bg-red-500/10 text-sm text-red-300">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Error</p>
+              <p className="text-red-400/80 text-xs mt-0.5">{error}</p>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="ml-auto text-red-400/60 hover:text-red-300 text-xs"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div className="flex-shrink-0 px-6 py-4 border-t border-slate-700/50 bg-slate-900/20">
+        {mode === 'query' && (
+          <>
+            {results.length > 0 && (
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={() => setResults([])}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Clear history
+                </button>
+              </div>
+            )}
+            <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+              <textarea
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask a question to validate against Cisco data… (Enter to send)"
+                rows={2}
+                className="flex-1 resize-none bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/40 transition-all"
+              />
+              <button
+                type="submit"
+                disabled={!query.trim() || loading}
+                className="flex-shrink-0 p-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all shadow-lg shadow-cyan-500/20"
+              >
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </button>
+            </form>
+            <p className="text-[10px] text-slate-600 mt-2 text-right">
+              Source: {SOURCE_LABELS[selectedSource]} · Shift+Enter for new line
+            </p>
+          </>
+        )}
+
+        {mode === 'validate' && (
+          <>
+            {validationResults.length > 0 && (
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={() => setValidationResults([])}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Clear reports
+                </button>
+              </div>
+            )}
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={moduleName}
+                onChange={(e) => setModuleName(e.target.value)}
+                placeholder="Module Name (optional)"
+                className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition-all"
+              />
+              <div className="flex gap-3">
+                <textarea
+                  ref={jsonRef}
+                  value={jsonContent}
+                  onChange={(e) => setJsonContent(e.target.value)}
+                  placeholder='Paste your JSON training content here (e.g., {"module": "...", "sections": [...]})'
+                  rows={6}
+                  className="flex-1 resize-none bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition-all font-mono"
+                />
+                <button
+                  onClick={handleValidateContent}
+                  disabled={!jsonContent.trim() || loading}
+                  className="flex-shrink-0 px-6 bg-gradient-to-r from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all shadow-lg shadow-emerald-500/20 font-medium text-sm"
+                >
+                  {loading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    'Validate'
+                  )}
+                </button>
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-600 mt-2 text-right">
+              Validation powered by Cisco Data RAG API · Source: {SOURCE_LABELS[selectedSource]}
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

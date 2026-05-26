@@ -96,7 +96,7 @@ class ModelManager:
         
         return models
     
-    def get_chat_model(self, model_id: Optional[str] = None, temperature: float = 0) -> Union[ChatOpenAI, AzureChatOpenAI, ChatBedrock, BedrockLLM]:
+    def get_chat_model(self, model_id: Optional[str] = None, temperature: Optional[float] = None) -> Union[ChatOpenAI, AzureChatOpenAI, ChatBedrock, BedrockLLM]:
         """Get a chat model instance"""
         # If no model_id or "auto", default to cisco-gpt-4.1
         if model_id == "auto" or not model_id:
@@ -117,41 +117,30 @@ class ModelManager:
             token = self._get_cisco_token()
             if not token:
                 raise ValueError("Failed to obtain Cisco access token. Check CISCO_CLIENT_ID and CISCO_CLIENT_SECRET.")
-            
-            # Extract deployment name from endpoint or use configured override
-            # Endpoint format: https://chat-ai.cisco.com/openai/deployments/gpt-4.1/chat/completions
-            # Deployment name: gpt-4.1 (or gpt-4o-mini, etc.)
+
+            # Use configured deployment, or extract from endpoint URL
             if settings.CISCO_DEPLOYMENT:
-                # Use explicitly configured deployment name
                 deployment_name = settings.CISCO_DEPLOYMENT
             else:
-                # Extract from endpoint URL
+                deployment_name = settings.CISCO_MODEL or "gpt-4.1"
                 endpoint_parts = settings.CISCO_ENDPOINT.split("/")
-                deployment_name = None
                 for i, part in enumerate(endpoint_parts):
                     if part == "deployments" and i + 1 < len(endpoint_parts):
                         deployment_name = endpoint_parts[i + 1]
                         break
-                
-                if not deployment_name:
-                    # Fallback: use model_identifier or default to gpt-4.1
-                    deployment_name = model_identifier if model_identifier else "gpt-4.1"
-            
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Creating AzureChatOpenAI for Cisco with deployment: {deployment_name}")
-            
-            # Cisco uses Azure OpenAI format with api-key header
-            # Use AzureChatOpenAI which supports api-key header natively
-            azure_endpoint = "https://chat-ai.cisco.com"
-            api_version = "2024-08-01-preview"
-            
+
+            effective_temperature = temperature if temperature is not None else settings.CISCO_TEMPERATURE
+
+            logger.info(f"Creating AzureChatOpenAI for Cisco with deployment: {deployment_name}, "
+                        f"max_tokens: {settings.CISCO_MAX_TOKENS}, temperature: {effective_temperature}")
+
             return AzureChatOpenAI(
-                azure_endpoint=azure_endpoint,
+                azure_endpoint="https://chat-ai.cisco.com",
                 azure_deployment=deployment_name,
-                openai_api_key=token,  # This will be used as api-key header
-                openai_api_version=api_version,
-                temperature=temperature
+                openai_api_key=token,
+                openai_api_version="2024-08-01-preview",
+                temperature=effective_temperature,
+                max_tokens=settings.CISCO_MAX_TOKENS,
             )
         elif provider == "openai":
             return ChatOpenAI(
@@ -203,9 +192,6 @@ class ModelManager:
                 raise ValueError(f"Invalid Bedrock model identifier: {model_identifier}")
             
             try:
-                import logging
-                logger = logging.getLogger(__name__)
-                
                 # Create bedrock client with correct region if needed
                 if use_region != settings.AWS_REGION:
                     bedrock_client = boto3.client(
@@ -239,8 +225,6 @@ class ModelManager:
                 
                 return bedrock_model
             except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.error(f"Error creating Bedrock model instance: {e}, model_id: {actual_model_id}, region: {use_region}", exc_info=True)
                 raise ValueError(f"Failed to initialize Bedrock model {actual_model_id}: {str(e)}")
         else:

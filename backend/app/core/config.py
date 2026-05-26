@@ -23,13 +23,22 @@ class Settings(BaseSettings):
     # Cisco OpenAI Endpoint (OAuth2)
     CISCO_CLIENT_ID: str = os.getenv("CISCO_CLIENT_ID", "")
     CISCO_CLIENT_SECRET: str = os.getenv("CISCO_CLIENT_SECRET", "")
-    CISCO_ENDPOINT: str = os.getenv("CISCO_ENDPOINT", "https://chat-ai.cisco.com/openai/deployments/gpt-4.1/chat/completions")
-    CISCO_DEPLOYMENT: str = os.getenv("CISCO_DEPLOYMENT", "")  # Optional: override deployment name (e.g., "gpt-4.1")
-    CISCO_APPKEY: str = os.getenv("CISCO_APPKEY", "")  # Optional appkey for user field
+    CISCO_ENDPOINT: str = os.getenv("CISCO_ENDPOINT", "https://chat-ai.cisco.com/openai/deployments/gpt-5-nano/chat/completions")
+    CISCO_DEPLOYMENT: str = os.getenv("CISCO_DEPLOYMENT", "")  # Optional: override deployment name
+    CISCO_APPKEY: str = os.getenv("CISCO_APPKEY", "")  # appkey sent in user field
+    CISCO_MODEL: str = os.getenv("CISCO_MODEL", "gpt-5-nano")
+    CISCO_MAX_TOKENS: int = int(os.getenv("CISCO_MAX_TOKENS", "4000"))
+    CISCO_TEMPERATURE: float = float(os.getenv("CISCO_TEMPERATURE", "0.7"))
+    CISCO_TOKEN_LIMIT: int = int(os.getenv("CISCO_TOKEN_LIMIT", "16384"))
 
     # Cisco DRIFT RAG (Incubation pipeline)
     DRIFT_CLIENT_ID: str = os.getenv("DRIFT_CLIENT_ID", "")
     DRIFT_CLIENT_SECRET: str = os.getenv("DRIFT_CLIENT_SECRET", "")
+
+    # Cisco Data RAG API (QC Agent - content validation)
+    QC_CLIENT_ID: str = os.getenv("QC_CLIENT_ID", "")
+    QC_CLIENT_SECRET: str = os.getenv("QC_CLIENT_SECRET", "")
+    QC_APP_ID: str = os.getenv("QC_APP_ID", "")
 
     # AWS Bedrock (optional - only if using Bedrock models)
     AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
