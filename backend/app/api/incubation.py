@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-DRIFT_PIPELINE_ID = "6a06a1094e965b488e905711"
+DRIFT_PIPELINE_ID = "6a38a7e5f5000dd0a5471bed"
 DRIFT_LLM_URL = f"https://driftllm.cisco.com/pipelines/llm/{DRIFT_PIPELINE_ID}"
 CISCO_TOKEN_URL = "https://id.cisco.com/oauth2/default/v1/token"
 
